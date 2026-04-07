@@ -32,8 +32,8 @@ const pagesRoutes = require('./routes/pages');
 
 // 初始化应用
 const app = express();
-// 确保在服务器上使用正确的端口
-const PORT = process.env.NODE_ENV === 'production' ? 8888 : config.port;
+// 优先使用环境变量 PORT（Railway 会动态注入），其次用配置文件端口
+const PORT = process.env.PORT || config.port;
 
 // 将配置添加到应用本地变量中，便于在中间件中访问
 app.locals.config = config;
