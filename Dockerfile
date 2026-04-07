@@ -13,9 +13,9 @@ RUN npm install
 # 复制应用程序代码
 COPY . .
 
-# 创建数据目录并设置权限
-RUN mkdir -p /usr/src/app/data && \
-    chmod -R 777 /usr/src/app/data
+# 创建数据目录并设置权限（/data 用于持久卷挂载）
+RUN mkdir -p /usr/src/app/data /data && \
+    chmod -R 777 /usr/src/app/data /data
 
 # 暴露端口
 EXPOSE 8888
