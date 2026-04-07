@@ -83,9 +83,7 @@ app.post('/login', (req, res) => {
   const { password } = req.body;
 
   console.log('登录尝试:');
-  console.log('- 密码:', password);
-  console.log('- 配置密码:', config.authPassword);
-  console.log('- 密码匹配:', password === config.authPassword);
+  console.log('- 密码匹配检查');
 
   // 如果认证功能未启用，直接重定向到首页
   if (!config.authEnabled) {
@@ -93,8 +91,11 @@ app.post('/login', (req, res) => {
     return res.redirect('/');
   }
 
-  // 检查密码是否正确
-  if (password === config.authPassword) {
+  // 支持主密码和共享密码两个入口
+  const sharePassword = process.env.SHARE_PASSWORD;
+  const isValid = password === config.authPassword || (sharePassword && password === sharePassword);
+
+  if (isValid) {
     console.log('- 密码正确，设置认证');
 
     // 同时使用会话和 Cookie 来存储认证状态
