@@ -39,7 +39,7 @@ async function createPage(htmlContent, isProtected = false, codeType = 'html') {
     // 保存到数据库
     // isProtected决定是否需要密码才能访问
     await run(
-      'INSERT INTO pages (id, html_content, created_at, password, is_protected, code_type) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO pages (id, html_content, created_at, password, is_protected, code_type) VALUES ($1, $2, $3, $4, $5, $6)',
       [urlId, htmlContent, Date.now(), password, isProtected ? 1 : 0, codeType]
     );
     
@@ -57,7 +57,7 @@ async function createPage(htmlContent, isProtected = false, codeType = 'html') {
  */
 async function getPageById(id) {
   try {
-    return await get('SELECT * FROM pages WHERE id = ?', [id]);
+    return await get('SELECT * FROM pages WHERE id = $1', [id]);
   } catch (error) {
     console.error('获取页面错误:', error);
     throw error;
@@ -72,7 +72,7 @@ async function getPageById(id) {
 async function getRecentPages(limit = 10) {
   try {
     return await query(
-      'SELECT id, created_at FROM pages ORDER BY created_at DESC LIMIT ?',
+      'SELECT id, created_at FROM pages ORDER BY created_at DESC LIMIT $1',
       [limit]
     );
   } catch (error) {
