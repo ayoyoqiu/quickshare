@@ -74,7 +74,7 @@ app.get('/login', (req, res) => {
   }
 
   res.render('login', {
-    title: 'HTML-Go | 登录',
+    title: 'LinkPaste AI | 登录',
     error: null
   });
 });
@@ -119,7 +119,7 @@ app.post('/login', (req, res) => {
     console.log('- 密码不匹配，显示错误');
     // 密码错误，显示错误信息
     res.render('login', {
-      title: 'HTML-Go | 登录',
+      title: 'LinkPaste AI | 登录',
       error: '密码错误，请重试'
     });
   }
@@ -200,7 +200,7 @@ app.get('/validate-password/:id', async (req, res) => {
 
 // 首页路由 - 需要登录才能访问
 app.get('/', isAuthenticated, (req, res) => {
-  res.render('index', { title: 'HTML-Go | 分享 HTML 代码的简单方式' });
+  res.render('index', { title: 'LinkPaste AI | 粘贴 AI 灵感，分享无限可能' });
 });
 
 // 导入代码类型检测和内容渲染工具
@@ -228,7 +228,7 @@ app.get('/view/:id', async (req, res) => {
       // 如果没有提供密码或密码不正确，显示密码输入页面
       if (!password || password !== page.password) {
         return res.render('password', {
-          title: 'HTML-Go | 密码保护',
+          title: 'LinkPaste AI | 密码保护',
           id: id,
           error: password ? '密码错误，请重试' : null
         });

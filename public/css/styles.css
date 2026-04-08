@@ -369,40 +369,22 @@ body {
   animation-timing-function: ease-in-out;
 }
 
-[data-theme="light"] .cyber-title span:nth-child(1) {
-  animation-name: letterColor1;
-  animation-delay: 0s;
+[data-theme="light"] .cyber-title .title-sep {
+  animation: none;
+  -webkit-text-fill-color: var(--text-secondary);
 }
 
-[data-theme="light"] .cyber-title span:nth-child(2) {
-  animation-name: letterColor2;
-  animation-delay: 0.2s;
-}
-
-[data-theme="light"] .cyber-title span:nth-child(3) {
-  animation-name: letterColor3;
-  animation-delay: 0.4s;
-}
-
-[data-theme="light"] .cyber-title span:nth-child(4) {
-  animation-name: letterColor4;
-  animation-delay: 0.6s;
-}
-
-[data-theme="light"] .cyber-title span:nth-child(5) {
-  animation-name: letterColor5;
-  animation-delay: 0.8s;
-}
-
-[data-theme="light"] .cyber-title span:nth-child(6) {
-  animation-name: letterColor6;
-  animation-delay: 1.0s;
-}
-
-[data-theme="light"] .cyber-title span:nth-child(7) {
-  animation-name: letterColor7;
-  animation-delay: 1.2s;
-}
+[data-theme="light"] .cyber-title span:nth-child(1)  { animation-name: letterColor1; animation-delay: 0s; }
+[data-theme="light"] .cyber-title span:nth-child(2)  { animation-name: letterColor2; animation-delay: 0.15s; }
+[data-theme="light"] .cyber-title span:nth-child(3)  { animation-name: letterColor3; animation-delay: 0.3s; }
+[data-theme="light"] .cyber-title span:nth-child(4)  { animation-name: letterColor4; animation-delay: 0.45s; }
+[data-theme="light"] .cyber-title span:nth-child(5)  { animation-name: letterColor5; animation-delay: 0.6s; }
+[data-theme="light"] .cyber-title span:nth-child(6)  { animation-name: letterColor6; animation-delay: 0.75s; }
+[data-theme="light"] .cyber-title span:nth-child(7)  { animation-name: letterColor7; animation-delay: 0.9s; }
+[data-theme="light"] .cyber-title span:nth-child(8)  { animation-name: letterColor1; animation-delay: 1.05s; }
+[data-theme="light"] .cyber-title span:nth-child(9)  { animation-name: letterColor2; animation-delay: 1.2s; }
+[data-theme="light"] .cyber-title span:nth-child(11) { animation-name: letterColor3; animation-delay: 1.35s; }
+[data-theme="light"] .cyber-title span:nth-child(12) { animation-name: letterColor4; animation-delay: 1.5s; }
 
 @keyframes letterColor1 {
   0%, 100% { color: var(--primary); -webkit-text-fill-color: var(--primary); }
@@ -440,7 +422,7 @@ body {
 }
 
 .title-container::before {
-  content: "HTML-GO";
+  content: "LinkPaste - AI";
   position: absolute;
   top: 0;
   left: 0;
