@@ -162,7 +162,8 @@ app.post('/api/pages/create', isAuthenticated, async (req, res) => {
     console.error('创建页面API错误:', error);
     res.status(500).json({
       success: false,
-      error: '服务器错误'
+      error: '服务器错误',
+      details: error.message
     });
   }
 });
@@ -370,28 +371,29 @@ app.use((req, res) => {
   });
 });
 
-// 启动应用
-initDatabase().then(() => {
-  // 添加更多调试日志
-  console.log('数据库初始化成功');
-  console.log(`当前环境: ${process.env.NODE_ENV}`);
-  console.log(`配置端口: ${config.port}`);
-  console.log(`实际使用端口: ${PORT}`);
-  console.log(`日志级别: ${config.logLevel}`);
+// 数据库初始化（与 app.listen 解耦，Vercel 无服务器环境也能正常运行）
+const dbReady = initDatabase()
+  .then(() => {
+    console.log('数据库初始化成功');
+    console.log(`当前环境: ${process.env.NODE_ENV}`);
+  })
+  .catch(err => {
+    console.error('数据库初始化失败:', err);
+  });
 
-  app.listen(PORT, () => {
-    console.log(`服务器运行在 http://localhost:${PORT}`);
-
-    // 添加路由处理器日志
-    console.log('已注册的路由:');
-    app._router.stack.forEach(middleware => {
-      if(middleware.route) { // 路由
-        console.log(`${Object.keys(middleware.route.methods)} ${middleware.route.path}`);
-      }
+// 非 Vercel 环境才启动 HTTP 监听
+if (!process.env.VERCEL) {
+  dbReady.then(() => {
+    app.listen(PORT, () => {
+      console.log(`服务器运行在 http://localhost:${PORT}`);
+      console.log('已注册的路由:');
+      app._router.stack.forEach(middleware => {
+        if (middleware.route) {
+          console.log(`${Object.keys(middleware.route.methods)} ${middleware.route.path}`);
+        }
+      });
     });
   });
-}).catch(err => {
-  console.error('数据库初始化失败:', err);
-});
+}
 
 module.exports = app;
