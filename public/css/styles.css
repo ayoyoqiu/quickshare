@@ -331,6 +331,7 @@ body {
   font-weight: 700;
   font-size: 3rem;
   letter-spacing: -0.025em;
+  white-space: nowrap;
   background: linear-gradient(90deg, var(--primary), var(--accent), var(--secondary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -422,7 +423,7 @@ body {
 }
 
 .title-container::before {
-  content: "LinkPaste - AI";
+  content: "LinkPaste-AI";
   position: absolute;
   top: 0;
   left: 0;
@@ -432,6 +433,7 @@ body {
   font-weight: 700;
   font-size: 3rem;
   letter-spacing: -0.025em;
+  white-space: nowrap;
   color: transparent;
   -webkit-text-stroke: 1px rgba(var(--primary-rgb), 0.3);
   z-index: 1;
