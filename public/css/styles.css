@@ -292,19 +292,22 @@ body {
 .app-header {
   text-align: center;
   margin-bottom: 1rem;
-  position: relative;
+}
+
+.indicator-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
 }
 
 .logout-btn {
-  position: absolute;
-  top: 0;
-  right: 0;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.4rem 0.9rem;
+  padding: 0.3rem 0.8rem;
   border-radius: 6px;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: var(--text-secondary);
   text-decoration: none;
   border: 1px solid rgba(255,255,255,0.1);
