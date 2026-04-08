@@ -81,7 +81,7 @@ router.post('/:id/protect', async (req, res) => {
 
     // 更新保护状态
     await run(
-      'UPDATE pages SET is_protected = ? WHERE id = ?',
+      'UPDATE pages SET is_protected = $1 WHERE id = $2',
       [isProtected ? 1 : 0, id]
     );
 
