@@ -292,6 +292,29 @@ body {
 .app-header {
   text-align: center;
   margin-bottom: 1rem;
+  position: relative;
+}
+
+.logout-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border: 1px solid rgba(255,255,255,0.1);
+  transition: all 0.2s ease;
+}
+
+.logout-btn:hover {
+  color: #fff;
+  border-color: rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.08);
 }
 
 /* 动态标题 */
