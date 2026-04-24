@@ -214,128 +214,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function buildShareUrl(pageId, password) {
-    const base = `${window.location.origin}/view/${encodeURIComponent(pageId)}`;
-    if (!password) return base;
-    return `${base}?password=${encodeURIComponent(password)}`;
-  }
-
-  async function copyText(text, successMsg) {
-    try {
-      await navigator.clipboard.writeText(text);
-      showSuccessToast(successMsg);
-      return;
-    } catch (e) {
-      try {
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-999999px';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        const ok = document.execCommand('copy');
-        document.body.removeChild(textArea);
-        if (ok) showSuccessToast(successMsg);
-        else showErrorToast('复制失败');
-      } catch (err) {
-        showErrorToast('复制失败');
-      }
-    }
-  }
-
-  async function setProjectProtection(pageId, isProtected) {
-    const r = await fetch('/api/pages/me/protect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pageId, isProtected })
-    });
-    const d = await r.json();
-    if (!d.success) {
-      throw new Error(d.error || '设置失败');
-    }
-    return d;
-  }
-
   /** 当前选中的项目 pageId；null 表示下次保存会新建独立链接 */
   let currentPageId = null;
   let currentProjectDisplayName = '';
   let lastSavedSnapshot = '';
   let hasUnsavedChanges = false;
+  const getEditorState = () => ({
+    currentPageId,
+    currentProjectDisplayName,
+    lastSavedSnapshot,
+    hasUnsavedChanges
+  });
+  const setEditorState = (next) => {
+    if (Object.prototype.hasOwnProperty.call(next, 'currentPageId')) currentPageId = next.currentPageId;
+    if (Object.prototype.hasOwnProperty.call(next, 'currentProjectDisplayName')) currentProjectDisplayName = next.currentProjectDisplayName;
+    if (Object.prototype.hasOwnProperty.call(next, 'lastSavedSnapshot')) lastSavedSnapshot = next.lastSavedSnapshot;
+    if (Object.prototype.hasOwnProperty.call(next, 'hasUnsavedChanges')) hasUnsavedChanges = next.hasUnsavedChanges;
+  };
 
-  function refreshUnsavedState() {
-    const current = htmlInput ? htmlInput.value : '';
-    hasUnsavedChanges = current !== lastSavedSnapshot;
-  }
-
-  function updateEditorModeUI() {
-    const isEditing = !!currentPageId;
-    const title = isEditing
-      ? `编辑项目：${currentProjectDisplayName || `/view/${currentPageId}`}`
-      : '新建项目';
-    if (editorModeText) {
-      editorModeText.textContent = title;
-    }
-    if (generateButton) {
-      generateButton.innerHTML = isEditing
-        ? '<i class="fas fa-save mr-1"></i>保存当前项目'
-        : '<i class="fas fa-link mr-1"></i>生成新链接';
-    }
-    if (exitEditModeBtn) {
-      exitEditModeBtn.style.display = isEditing ? 'inline-flex' : 'none';
-    }
-  }
-
-  function confirmBeforeModeSwitch(targetLabel) {
-    refreshUnsavedState();
-    if (!hasUnsavedChanges) return true;
-    return window.confirm(`当前内容有未保存修改，切换到「${targetLabel}」后仍会保留文本，但不会自动保存。是否继续？`);
-  }
-
-  function enterNewProjectMode(showToast) {
-    currentPageId = null;
-    currentProjectDisplayName = '';
-    lastSavedSnapshot = htmlInput ? htmlInput.value : '';
-    hasUnsavedChanges = false;
-    updateEditorModeUI();
-    refreshProjectsPanel();
-    refreshVersionsPanel(null);
-    if (showToast) {
-      showSuccessToast('已切换到新建模式：当前内容保留，保存时会生成新项目');
-    }
-  }
-
-  function applyProjectToEditor(pagePayload, shareUrl) {
-    if (!pagePayload) return;
-    if (htmlInput) {
-      htmlInput.value = pagePayload.htmlContent || '';
-      syncToTextarea();
-    }
-    if (passwordToggle) {
-      passwordToggle.checked = !!pagePayload.isProtected;
-    }
-    if (resultUrl && shareUrl) {
-      const detectedForUrl = detectCodeType(htmlInput ? htmlInput.value : '');
-      const themeParam = (detectedForUrl === 'markdown' && selectedMdTheme && selectedMdTheme !== 'bytedance')
-        ? `?theme=${selectedMdTheme}` : '';
-      const url = `${shareUrl}${themeParam}`;
-      resultUrl.innerHTML = formatUrl(url);
-      resultUrl.dataset.originalUrl = url;
-      resultUrl.dataset.pageId = pagePayload.id || currentPageId || '';
-    }
-    if (resultSection) {
-      resultSection.style.display = 'block';
-    }
-    if (generatedPassword) {
-      generatedPassword.textContent = '';
-    }
-    if (passwordInfo) passwordInfo.style.display = 'none';
-    if (copyPasswordLink) copyPasswordLink.style.display = 'none';
-    lastSavedSnapshot = htmlInput ? htmlInput.value : '';
-    hasUnsavedChanges = false;
-    currentProjectDisplayName = (pagePayload.displayName || '').trim();
-    updateEditorModeUI();
-  }
+  let refreshProjectsPanel = async () => {};
+  let refreshVersionsPanel = async () => {};
+  let refreshUnsavedState = () => {};
+  let updateEditorModeUI = () => {};
+  let confirmBeforeModeSwitch = () => true;
+  let enterNewProjectMode = () => {};
+  let applyProjectToEditor = () => {};
 
   async function selectProject(pageId) {
     if (!pageId) return;
@@ -357,267 +260,62 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  async function refreshVersionsPanel(pageId) {
-    const versionsList = document.getElementById('versions-list');
-    const versionsEmpty = document.getElementById('versions-empty');
-    if (!versionsList) return;
+  const editorModeModule = window.createEditorModeModule ? window.createEditorModeModule({
+    htmlInput,
+    generateButton,
+    editorModeText,
+    exitEditModeBtn,
+    resultUrl,
+    resultSection,
+    passwordToggle,
+    generatedPassword,
+    passwordInfo,
+    copyPasswordLink,
+    detectCodeType,
+    selectedMdTheme,
+    formatUrl,
+    showSuccessToast,
+    getState: getEditorState,
+    setState: setEditorState,
+    refreshProjectsPanel: () => refreshProjectsPanel(),
+    refreshVersionsPanel: (pageId) => refreshVersionsPanel(pageId),
+    syncToTextarea
+  }) : null;
 
-    if (!pageId) {
-      versionsList.innerHTML = '';
-      if (versionsEmpty) versionsEmpty.style.display = 'block';
-      return;
-    }
-
-    try {
-      const vRes = await fetch(`/api/pages/me/versions?limit=25&pageId=${encodeURIComponent(pageId)}`);
-      const v = await vRes.json();
-      const versions = (v.success && v.versions) ? v.versions : [];
-      if (versionsEmpty) {
-        versionsEmpty.style.display = versions.length ? 'none' : 'block';
-      }
-
-      versionsList.innerHTML = versions.map((row) => {
-        const raw = row.preview || '';
-        const prev = raw.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const lock = row.is_protected ? '<i class="fas fa-lock" title="该快照含访问密码"></i> ' : '';
-        return `
-          <div class="version-row" style="border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;">
-            <div style="display:flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap;">
-              <div>
-                <strong>v${row.version_number}</strong> ${lock}<span style="color: var(--text-secondary); font-size: 0.85rem;">${formatVersionTime(row.created_at)}</span>
-                <div style="margin-top: 6px; font-size: 0.8rem; color: var(--text-secondary); max-height: 3em; overflow: hidden;">${prev || '（无预览）'}</div>
-              </div>
-              <div style="display:flex; gap: 6px; flex-shrink: 0;">
-                <button type="button" class="cyber-btn cyber-btn-secondary version-load" data-v="${row.version_number}" style="padding: 4px 10px; font-size: 0.8rem;">载入编辑</button>
-                <button type="button" class="cyber-btn cyber-btn-primary version-restore" data-v="${row.version_number}" style="padding: 4px 10px; font-size: 0.8rem;">恢复线上</button>
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('');
-
-      versionsList.querySelectorAll('.version-load').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          const vn = btn.getAttribute('data-v');
-          try {
-            const r = await fetch(`/api/pages/me/versions/${vn}?pageId=${encodeURIComponent(pageId)}`);
-            const d = await r.json();
-            if (!d.success || !d.version) throw new Error('加载失败');
-            if (htmlInput) {
-              htmlInput.value = d.version.htmlContent;
-              syncToTextarea();
-              showSuccessToast(`已载入 v${vn} 到编辑器`);
-            }
-          } catch (e) {
-            showErrorToast('载入版本失败');
-          }
-        });
-      });
-
-      versionsList.querySelectorAll('.version-restore').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          const vn = btn.getAttribute('data-v');
-          if (!confirm(`确定将 v${vn} 恢复为当前线上展示内容？\n该项目的分享链接不变，并会新增一条版本记录。`)) return;
-          try {
-            const r = await fetch(`/api/pages/me/versions/${vn}/restore`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ pageId })
-            });
-            const d = await r.json();
-            if (!d.success) throw new Error(d.error || '恢复失败');
-            showSuccessToast(`已恢复为 v${vn}，新版本号为 v${d.newVersionNumber}`);
-            await selectProject(pageId);
-          } catch (e) {
-            showErrorToast('恢复失败');
-          }
-        });
-      });
-    } catch (e) {
-      console.error('刷新版本列表失败:', e);
-    }
+  if (editorModeModule) {
+    refreshUnsavedState = editorModeModule.refreshUnsavedState;
+    updateEditorModeUI = editorModeModule.updateEditorModeUI;
+    confirmBeforeModeSwitch = editorModeModule.confirmBeforeModeSwitch;
+    enterNewProjectMode = editorModeModule.enterNewProjectMode;
+    applyProjectToEditor = editorModeModule.applyProjectToEditor;
   }
 
-  const RECENT_PROJECTS_LIMIT = 5;
+  const versionPanelModule = window.createVersionPanelModule ? window.createVersionPanelModule({
+    htmlInput,
+    syncToTextarea,
+    formatVersionTime,
+    showErrorToast,
+    showSuccessToast,
+    selectProject
+  }) : null;
 
-  async function renameProjectQuick(pageId, currentName) {
-    const msg = '项目显示名称（最长 80 字，留空则清除自定义名称）';
-    const next = window.prompt(msg, currentName || '');
-    if (next === null) return;
-    try {
-      const r = await fetch(`/api/pages/me/project/${encodeURIComponent(pageId)}/rename`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ displayName: next })
-      });
-      const d = await r.json();
-      if (!d.success) throw new Error(d.error || '重命名失败');
-      showSuccessToast(d.displayName ? '已更新名称' : '已清除自定义名称');
-      await refreshProjectsPanel();
-    } catch (e) {
-      showErrorToast(e.message || '重命名失败');
-    }
+  if (versionPanelModule) {
+    refreshVersionsPanel = versionPanelModule.refreshVersionsPanel;
   }
 
-  async function refreshProjectsPanel() {
-    const assetMeta = document.getElementById('asset-meta');
-    const projectsList = document.getElementById('projects-list');
-    const projectsEmpty = document.getElementById('projects-empty');
-    if (!projectsList) return;
+  const projectPanelModule = window.createProjectPanelModule ? window.createProjectPanelModule({
+    escHtml,
+    formatVersionTime,
+    getCurrentPageId: () => currentPageId,
+    confirmBeforeModeSwitch,
+    selectProject,
+    showErrorToast,
+    showSuccessToast
+  }) : null;
 
-    try {
-      const [aRes, pRes] = await Promise.all([
-        fetch('/api/pages/me/asset'),
-        fetch(`/api/pages/me/projects?limit=${RECENT_PROJECTS_LIMIT}`)
-      ]);
-      const a = await aRes.json();
-      const p = await pRes.json();
-
-      if (!a.success || !p.success) return;
-
-      const total = a.asset.projectCount;
-      if (assetMeta) {
-        assetMeta.textContent =
-          `共 ${total} 个项目 · 下方展示最近 ${RECENT_PROJECTS_LIMIT} 条（按更新时间）。选中后可编辑保存（链接不变）；点「我的项目列表」可浏览全部并重命名。`;
-      }
-
-      const projects = p.projects || [];
-      if (projectsEmpty) {
-        projectsEmpty.style.display = projects.length ? 'none' : 'block';
-      }
-
-      projectsList.innerHTML = projects.map((row) => {
-        const raw = row.preview || '';
-        const prev = raw.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const active = currentPageId && row.id === currentPageId;
-        const border = active ? '2px solid var(--accent)' : '1px solid var(--border-color)';
-        const lock = row.is_protected ? '<i class="fas fa-lock" style="margin-left:6px;" title="访问密码"></i>' : '';
-        const dn = row.display_name && String(row.display_name).trim() ? String(row.display_name).trim() : '';
-        const titleLine = dn
-          ? `<strong>${escHtml(dn)}</strong><span style="color: var(--text-secondary); font-weight: normal; font-size: 0.85rem;"> · /view/${escHtml(row.id)}</span>`
-          : `<strong>/view/${escHtml(row.id)}</strong>`;
-        return `
-          <div class="project-row" data-page-id="${escHtml(row.id)}" style="border: ${border}; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer;">
-            <div style="display:flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap;">
-              <div style="flex: 1; min-width: 0;">
-                <div>${titleLine}${lock}</div>
-                <div style="margin-top: 4px; font-size: 0.85rem; color: var(--text-secondary);">${formatVersionTime(row.created_at)}</div>
-                <div style="margin-top: 6px; font-size: 0.8rem; color: var(--text-secondary); max-height: 2.6em; overflow: hidden;">${prev || '（无预览）'}</div>
-              </div>
-              <div style="display:flex; gap: 6px; flex-shrink: 0; align-items: center;">
-                <button type="button" class="cyber-btn cyber-btn-secondary project-copy-btn" data-page-id="${escHtml(row.id)}" style="padding: 4px 10px; font-size: 0.8rem;" title="复制链接">
-                  <i class="fas fa-copy"></i>
-                </button>
-                <button type="button" class="cyber-btn cyber-btn-secondary project-share-btn" data-page-id="${escHtml(row.id)}" style="padding: 4px 10px; font-size: 0.8rem;" title="分享链接">
-                  <i class="fas fa-share-alt"></i>
-                </button>
-                <button type="button" class="cyber-btn cyber-btn-secondary project-protect-btn" data-page-id="${escHtml(row.id)}" data-is-protected="${row.is_protected ? '1' : '0'}" style="padding: 4px 10px; font-size: 0.8rem;" title="密码保护">
-                  <i class="fas fa-shield-alt"></i>
-                </button>
-                <button type="button" class="cyber-btn cyber-btn-secondary project-rename-btn" data-page-id="${escHtml(row.id)}" data-display-name="${escHtml(dn)}" style="padding: 4px 10px; font-size: 0.8rem;" title="重命名">
-                  <i class="fas fa-pen"></i>
-                </button>
-                <span class="cyber-btn cyber-btn-secondary" style="padding: 4px 10px; font-size: 0.8rem; pointer-events: none;">打开编辑</span>
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('');
-    } catch (e) {
-      console.error('刷新项目列表失败:', e);
-    }
-  }
-
-  function onProjectsListClick(ev) {
-    const copyBtn = ev.target.closest('.project-copy-btn');
-    if (copyBtn) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      const pid = copyBtn.getAttribute('data-page-id');
-      if (pid) copyText(buildShareUrl(pid), '链接已复制');
-      return;
-    }
-
-    const shareBtn = ev.target.closest('.project-share-btn');
-    if (shareBtn) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      const pid = shareBtn.getAttribute('data-page-id');
-      if (!pid) return;
-      const url = buildShareUrl(pid);
-      (async () => {
-        try {
-          if (navigator.share) {
-            await navigator.share({
-              title: 'LinkPaste 分享',
-              text: '这是我的 LinkPaste 项目链接',
-              url
-            });
-          } else {
-            await copyText(url, '当前浏览器不支持原生分享，已复制链接');
-          }
-        } catch (err) {
-          if (String(err && err.message || '').toLowerCase().includes('abort')) return;
-          showErrorToast('分享失败');
-        }
-      })();
-      return;
-    }
-
-    const protectBtn = ev.target.closest('.project-protect-btn');
-    if (protectBtn) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      const pid = protectBtn.getAttribute('data-page-id');
-      const protectedNow = protectBtn.getAttribute('data-is-protected') === '1';
-      if (!pid) return;
-      if (protectedNow && !window.confirm('确定取消该项目的访问密码保护吗？')) return;
-      (async () => {
-        try {
-          const d = await setProjectProtection(pid, !protectedNow);
-          if (d.isProtected) {
-            const pwd = d.password || '';
-            const plain = buildShareUrl(pid);
-            const withPwd = buildShareUrl(pid, pwd);
-            const text = pwd
-              ? `链接: ${plain}\n密码: ${pwd}\n直达链接: ${withPwd}`
-              : `链接: ${plain}`;
-            await copyText(text, '已开启密码保护，并复制链接与密码');
-          } else {
-            showSuccessToast('已取消密码保护');
-          }
-          await refreshProjectsPanel();
-          if (currentPageId === pid) {
-            await selectProject(pid);
-          }
-        } catch (err) {
-          showErrorToast(err.message || '设置密码保护失败');
-        }
-      })();
-      return;
-    }
-
-    const renameBtn = ev.target.closest('.project-rename-btn');
-    if (renameBtn) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      const pid = renameBtn.getAttribute('data-page-id');
-      const cur = renameBtn.getAttribute('data-display-name') || '';
-      if (pid) renameProjectQuick(pid, cur);
-      return;
-    }
-    const row = ev.target.closest('.project-row');
-    if (!row) return;
-    const id = row.getAttribute('data-page-id');
-    if (!id) return;
-    if (id === currentPageId) return;
-    if (!confirmBeforeModeSwitch('编辑项目')) return;
-    selectProject(id);
-  }
-
-  const projectsListRoot = document.getElementById('projects-list');
-  if (projectsListRoot) {
-    projectsListRoot.addEventListener('click', onProjectsListClick);
+  if (projectPanelModule) {
+    refreshProjectsPanel = projectPanelModule.refreshProjectsPanel;
+    projectPanelModule.mount();
   }
 
   async function refreshAssetPanel() {

@@ -34,6 +34,9 @@
   <script src="/js/theme.js"></script>
   <script src="/js/particles-config.js"></script>
   <% if (typeof skipMainJs === 'undefined' || !skipMainJs) { %>
+  <script src="/js/modules/editor-mode.js?v=<%= Date.now() %>"></script>
+  <script src="/js/modules/version-panel.js?v=<%= Date.now() %>"></script>
+  <script src="/js/modules/project-panel.js?v=<%= Date.now() %>"></script>
   <script src="/js/main.js?v=<%= Date.now() %>"></script>
   <script src="/js/syntax-highlight.js"></script>
   <% } %>

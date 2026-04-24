@@ -90,9 +90,6 @@ body {
   font-family: 'Noto Sans SC', sans-serif;
   background-color: var(--dark);
   color: var(--text-primary);
-  min-height: 100vh;
-  overflow-x: hidden;
-  overflow-y: auto;
   line-height: 1.5;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -157,9 +154,6 @@ body {
 .app-container {
   position: relative;
   background: var(--gradient-bg);
-  min-height: 100vh;
-  overflow-x: hidden;
-  overflow-y: visible;
 }
 
 .app-container::before {
@@ -257,47 +251,14 @@ body {
   padding: 1rem;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  height: auto;
-  justify-content: flex-start;
-  overflow: visible;
 }
 
 /* 添加中间内容区域样式 */
 .content-area {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  flex: 0 auto;
+  /* moved to layout-scroll.css */
 }
 
-/* 全局简洁滚动条（WebKit） */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(var(--primary-rgb), 0.35);
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(var(--primary-rgb), 0.55);
-  background-clip: padding-box;
-}
-
-/* Firefox 滚动条 */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(var(--primary-rgb), 0.45) transparent;
-}
+/* scrollbar moved to layout-scroll.css */
 
 /* 标题样式 */
 .app-header {
