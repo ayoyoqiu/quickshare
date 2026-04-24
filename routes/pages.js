@@ -10,7 +10,8 @@ const {
   countPageVersions,
   listUserProjects,
   countUserProjects,
-  getUserProject
+  getUserProject,
+  renameUserProject
 } = require('../models/pages');
 const { isAuthenticated } = require('../middleware/auth');
 
@@ -30,6 +31,30 @@ router.get('/me/projects', isAuthenticated, async (req, res) => {
     });
   } catch (error) {
     console.error('获取项目列表API错误:', error);
+    res.status(500).json({ success: false, error: '服务器错误' });
+  }
+});
+
+/**
+ * 重命名项目（展示名，不影响分享链接 id）
+ * PATCH /api/pages/me/project/:pageId/rename  body: { displayName }
+ */
+router.patch('/me/project/:pageId/rename', isAuthenticated, async (req, res) => {
+  try {
+    const userId = req.session.user.id;
+    const { pageId } = req.params;
+    const { displayName } = req.body || {};
+    const result = await renameUserProject(userId, String(pageId).trim(), displayName);
+    res.json({
+      success: true,
+      pageId: result.pageId,
+      displayName: result.displayName
+    });
+  } catch (error) {
+    if (error.code === 'PAGE_NOT_FOUND') {
+      return res.status(404).json({ success: false, error: '项目不存在' });
+    }
+    console.error('重命名项目API错误:', error);
     res.status(500).json({ success: false, error: '服务器错误' });
   }
 });
@@ -55,7 +80,8 @@ router.get('/me/project/:pageId', isAuthenticated, async (req, res) => {
         htmlContent: page.html_content,
         codeType: page.code_type,
         isProtected: page.is_protected === 1,
-        createdAt: page.created_at
+        createdAt: page.created_at,
+        displayName: page.display_name || ''
       }
     });
   } catch (error) {

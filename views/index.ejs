@@ -76,10 +76,10 @@
     <!-- 用户项目（每个项目独立分享链接）与版本历史 -->
     <div id="asset-panel" class="card input-card" style="margin-top: 1.25rem;">
       <h3 class="section-title" style="color: var(--primary); font-family: 'Orbitron', sans-serif; margin-bottom: 0.75rem;">
-        <i class="fas fa-gem" style="margin-right: 8px; opacity: 0.85;"></i>我的项目
+        <i class="fas fa-gem" style="margin-right: 8px; opacity: 0.85;"></i>最近项目
       </h3>
       <p class="asset-hint" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 0.75rem;">
-        每个项目有独立分享链接。选中项目后可编辑原文并保存（链接不变）；也可从历史版本载入或恢复。
+        每个项目有独立分享链接。此处展示<strong>最近更新</strong>的若干条，便于快速打开编辑；可<strong>重命名</strong>显示名（不影响链接）。完整列表请进入「我的项目列表」页。
       </p>
       <div id="asset-meta" style="margin-bottom: 0.75rem; color: var(--text-secondary); font-size: 0.9rem;"></div>
       <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
@@ -89,6 +89,9 @@
         <button type="button" id="refresh-projects-btn" class="cyber-btn cyber-btn-secondary" style="padding: 6px 12px; font-size: 0.85rem;">
           <i class="fas fa-sync-alt"></i> 刷新项目
         </button>
+        <a href="/projects" class="cyber-btn cyber-btn-primary" style="padding: 6px 12px; font-size: 0.85rem; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+          <i class="fas fa-list-ul"></i> 我的项目列表
+        </a>
       </div>
       <div id="projects-list" class="projects-list" aria-live="polite" style="margin-bottom: 1.25rem;"></div>
       <p id="projects-empty" style="color: var(--text-secondary); font-size: 0.9rem; display: none;">暂无项目，在上方编辑内容后点击「生成链接」将创建第一个项目。</p>

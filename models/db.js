@@ -28,6 +28,7 @@ async function initDatabase() {
   `);
 
   await pool.query('ALTER TABLE pages ADD COLUMN IF NOT EXISTS owner_user_id BIGINT');
+  await pool.query('ALTER TABLE pages ADD COLUMN IF NOT EXISTS display_name TEXT');
   await pool.query('DROP INDEX IF EXISTS idx_pages_owner_user_id');
   await pool.query(
     'CREATE INDEX IF NOT EXISTS idx_pages_owner_user_id ON pages(owner_user_id)'

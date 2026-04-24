@@ -265,6 +265,10 @@ app.get('/', isAuthenticated, (req, res) => {
   res.render('index', { title: 'LinkPaste AI | 粘贴 AI 灵感，分享无限可能' });
 });
 
+app.get('/projects', isAuthenticated, (req, res) => {
+  res.render('projects', { title: 'LinkPaste AI | 我的项目' });
+});
+
 // 导入代码类型检测和内容渲染工具
 const { detectCodeType, CODE_TYPES } = require('./utils/codeDetector');
 const { renderContent } = require('./utils/contentRenderer');

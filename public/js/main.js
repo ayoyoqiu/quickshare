@@ -83,8 +83,20 @@ function showSuccessToast(message) {
 
 // 使用延迟加载确保所有元素已经完全渲染好
 document.addEventListener('DOMContentLoaded', () => {
+  if (!document.getElementById('generate-button')) {
+    return;
+  }
+
   console.log('DOM完全加载，初始化应用...');
-  
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
   // DOM 元素
   const htmlInput = document.getElementById('html-input');
   const fileInput = document.getElementById('html-file');
@@ -329,6 +341,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  const RECENT_PROJECTS_LIMIT = 5;
+
+  async function renameProjectQuick(pageId, currentName) {
+    const msg = '项目显示名称（最长 80 字，留空则清除自定义名称）';
+    const next = window.prompt(msg, currentName || '');
+    if (next === null) return;
+    try {
+      const r = await fetch(`/api/pages/me/project/${encodeURIComponent(pageId)}/rename`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: next })
+      });
+      const d = await r.json();
+      if (!d.success) throw new Error(d.error || '重命名失败');
+      showSuccessToast(d.displayName ? '已更新名称' : '已清除自定义名称');
+      await refreshProjectsPanel();
+    } catch (e) {
+      showErrorToast(e.message || '重命名失败');
+    }
+  }
+
   async function refreshProjectsPanel() {
     const assetMeta = document.getElementById('asset-meta');
     const projectsList = document.getElementById('projects-list');
@@ -338,15 +371,17 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const [aRes, pRes] = await Promise.all([
         fetch('/api/pages/me/asset'),
-        fetch('/api/pages/me/projects?limit=50')
+        fetch(`/api/pages/me/projects?limit=${RECENT_PROJECTS_LIMIT}`)
       ]);
       const a = await aRes.json();
       const p = await pRes.json();
 
       if (!a.success || !p.success) return;
 
+      const total = a.asset.projectCount;
       if (assetMeta) {
-        assetMeta.textContent = `共 ${a.asset.projectCount} 个项目 · 选中后可编辑并保存（链接不变），未选中时保存会新建独立链接`;
+        assetMeta.textContent =
+          `共 ${total} 个项目 · 下方展示最近 ${RECENT_PROJECTS_LIMIT} 条（按更新时间）。选中后可编辑保存（链接不变）；点「我的项目列表」可浏览全部并重命名。`;
       }
 
       const projects = p.projects || [];
@@ -360,29 +395,52 @@ document.addEventListener('DOMContentLoaded', () => {
         const active = currentPageId && row.id === currentPageId;
         const border = active ? '2px solid var(--accent)' : '1px solid var(--border-color)';
         const lock = row.is_protected ? '<i class="fas fa-lock" style="margin-left:6px;" title="访问密码"></i>' : '';
+        const dn = row.display_name && String(row.display_name).trim() ? String(row.display_name).trim() : '';
+        const titleLine = dn
+          ? `<strong>${escHtml(dn)}</strong><span style="color: var(--text-secondary); font-weight: normal; font-size: 0.85rem;"> · /view/${escHtml(row.id)}</span>`
+          : `<strong>/view/${escHtml(row.id)}</strong>`;
         return `
-          <div class="project-row" data-page-id="${row.id}" style="border: ${border}; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer;">
+          <div class="project-row" data-page-id="${escHtml(row.id)}" style="border: ${border}; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer;">
             <div style="display:flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap;">
-              <div>
-                <strong>/view/${row.id}</strong>${lock}
+              <div style="flex: 1; min-width: 0;">
+                <div>${titleLine}${lock}</div>
                 <div style="margin-top: 4px; font-size: 0.85rem; color: var(--text-secondary);">${formatVersionTime(row.created_at)}</div>
                 <div style="margin-top: 6px; font-size: 0.8rem; color: var(--text-secondary); max-height: 2.6em; overflow: hidden;">${prev || '（无预览）'}</div>
               </div>
-              <span class="cyber-btn cyber-btn-secondary" style="padding: 4px 10px; font-size: 0.8rem; pointer-events: none;">打开编辑</span>
+              <div style="display:flex; gap: 6px; flex-shrink: 0; align-items: center;">
+                <button type="button" class="cyber-btn cyber-btn-secondary project-rename-btn" data-page-id="${escHtml(row.id)}" data-display-name="${escHtml(dn)}" style="padding: 4px 10px; font-size: 0.8rem;" title="重命名">
+                  <i class="fas fa-pen"></i>
+                </button>
+                <span class="cyber-btn cyber-btn-secondary" style="padding: 4px 10px; font-size: 0.8rem; pointer-events: none;">打开编辑</span>
+              </div>
             </div>
           </div>
         `;
       }).join('');
-
-      projectsList.onclick = (ev) => {
-        const row = ev.target.closest('.project-row');
-        if (!row) return;
-        const id = row.getAttribute('data-page-id');
-        if (id) selectProject(id);
-      };
     } catch (e) {
       console.error('刷新项目列表失败:', e);
     }
+  }
+
+  function onProjectsListClick(ev) {
+    const renameBtn = ev.target.closest('.project-rename-btn');
+    if (renameBtn) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const pid = renameBtn.getAttribute('data-page-id');
+      const cur = renameBtn.getAttribute('data-display-name') || '';
+      if (pid) renameProjectQuick(pid, cur);
+      return;
+    }
+    const row = ev.target.closest('.project-row');
+    if (!row) return;
+    const id = row.getAttribute('data-page-id');
+    if (id) selectProject(id);
+  }
+
+  const projectsListRoot = document.getElementById('projects-list');
+  if (projectsListRoot) {
+    projectsListRoot.addEventListener('click', onProjectsListClick);
   }
 
   async function refreshAssetPanel() {
@@ -1119,7 +1177,17 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   refreshAssetPanel();
-  
+
+  try {
+    const openId = sessionStorage.getItem('quickshare-open-project');
+    if (openId) {
+      sessionStorage.removeItem('quickshare-open-project');
+      selectProject(openId);
+    }
+  } catch (e) {
+    /* ignore */
+  }
+
   // 初始化完成
   console.log('应用初始化完成');
 });

@@ -202,7 +202,7 @@ async function getPageByUserId(userId) {
 async function listUserProjects(userId, limit = 50) {
   const lim = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 100);
   return query(
-    `SELECT id, created_at, is_protected,
+    `SELECT id, created_at, is_protected, display_name,
             SUBSTRING(html_content FROM 1 FOR 120) AS preview
      FROM pages
      WHERE owner_user_id = $1
@@ -210,6 +210,24 @@ async function listUserProjects(userId, limit = 50) {
      LIMIT $2`,
     [userId, lim]
   );
+}
+
+const DISPLAY_NAME_MAX = 80;
+
+async function renameUserProject(userId, pageId, rawName) {
+  const page = await getUserProject(userId, pageId);
+  if (!page) {
+    const err = new Error('PAGE_NOT_FOUND');
+    err.code = 'PAGE_NOT_FOUND';
+    throw err;
+  }
+  const trimmed = String(rawName ?? '').trim().slice(0, DISPLAY_NAME_MAX);
+  const value = trimmed.length ? trimmed : null;
+  await run(
+    'UPDATE pages SET display_name = $1 WHERE id = $2 AND owner_user_id = $3',
+    [value, pageId, userId]
+  );
+  return { pageId, displayName: trimmed };
 }
 
 async function getUserProject(userId, pageId) {
@@ -333,5 +351,6 @@ module.exports = {
   getPageVersion,
   restorePageVersion,
   countPageVersions,
-  countUserProjects
+  countUserProjects,
+  renameUserProject
 };
