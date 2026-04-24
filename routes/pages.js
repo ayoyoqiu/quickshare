@@ -252,11 +252,14 @@ router.post('/me/protect', isAuthenticated, async (req, res) => {
       return res.status(400).json({ success: false, error: '请指定 pageId' });
     }
 
-    await updateUserPageProtection(userId, String(pageId).trim(), !!isProtected);
+    const updated = await updateUserPageProtection(userId, String(pageId).trim(), !!isProtected);
 
     res.json({
       success: true,
-      message: '保护状态更新成功'
+      message: '保护状态更新成功',
+      pageId: updated.pageId,
+      isProtected: updated.isProtected,
+      password: updated.password
     });
   } catch (error) {
     if (error.code === 'PAGE_NOT_FOUND') {

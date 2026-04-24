@@ -256,6 +256,12 @@ async function updateUserPageProtection(userId, pageId, isProtected) {
     'UPDATE pages SET is_protected = $1, password = $2 WHERE id = $3 AND owner_user_id = $4',
     [isProtected ? 1 : 0, password, pageId, userId]
   );
+
+  return {
+    pageId,
+    isProtected: !!isProtected,
+    password: isProtected ? password : ''
+  };
 }
 
 async function listPageVersions(userId, pageId, limit = 30) {

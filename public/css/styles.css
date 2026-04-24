@@ -90,8 +90,9 @@ body {
   font-family: 'Noto Sans SC', sans-serif;
   background-color: var(--dark);
   color: var(--text-primary);
-  height: 100vh;
-  overflow: hidden; /* 防止滚动条出现 */
+  min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
   line-height: 1.5;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -157,7 +158,8 @@ body {
   position: relative;
   background: var(--gradient-bg);
   min-height: 100vh;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
 .app-container::before {
@@ -255,9 +257,10 @@ body {
   padding: 1rem;
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  justify-content: space-between;
-  overflow: hidden;
+  min-height: 100vh;
+  height: auto;
+  justify-content: flex-start;
+  overflow: visible;
 }
 
 /* 添加中间内容区域样式 */
