@@ -114,6 +114,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const generatedPassword = document.getElementById('generated-password');
   const copyPasswordOnly = document.getElementById('copy-password-button');
   const copyPasswordLink = document.getElementById('copy-password-link');
+  const editorModeText = document.getElementById('editor-mode-text');
+  const exitEditModeBtn = document.getElementById('exit-edit-mode-btn');
   
   // 创建代码编辑器
   let codeElement = null;
@@ -214,6 +216,51 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /** 当前选中的项目 pageId；null 表示下次保存会新建独立链接 */
   let currentPageId = null;
+  let currentProjectDisplayName = '';
+  let lastSavedSnapshot = '';
+  let hasUnsavedChanges = false;
+
+  function refreshUnsavedState() {
+    const current = htmlInput ? htmlInput.value : '';
+    hasUnsavedChanges = current !== lastSavedSnapshot;
+  }
+
+  function updateEditorModeUI() {
+    const isEditing = !!currentPageId;
+    const title = isEditing
+      ? `编辑项目：${currentProjectDisplayName || `/view/${currentPageId}`}`
+      : '新建项目';
+    if (editorModeText) {
+      editorModeText.textContent = title;
+    }
+    if (generateButton) {
+      generateButton.innerHTML = isEditing
+        ? '<i class="fas fa-save mr-1"></i>保存当前项目'
+        : '<i class="fas fa-link mr-1"></i>生成新链接';
+    }
+    if (exitEditModeBtn) {
+      exitEditModeBtn.style.display = isEditing ? 'inline-flex' : 'none';
+    }
+  }
+
+  function confirmBeforeModeSwitch(targetLabel) {
+    refreshUnsavedState();
+    if (!hasUnsavedChanges) return true;
+    return window.confirm(`当前内容有未保存修改，切换到「${targetLabel}」后仍会保留文本，但不会自动保存。是否继续？`);
+  }
+
+  function enterNewProjectMode(showToast) {
+    currentPageId = null;
+    currentProjectDisplayName = '';
+    lastSavedSnapshot = htmlInput ? htmlInput.value : '';
+    hasUnsavedChanges = false;
+    updateEditorModeUI();
+    refreshProjectsPanel();
+    refreshVersionsPanel(null);
+    if (showToast) {
+      showSuccessToast('已切换到新建模式：当前内容保留，保存时会生成新项目');
+    }
+  }
 
   function applyProjectToEditor(pagePayload, shareUrl) {
     if (!pagePayload) return;
@@ -241,15 +288,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (passwordInfo) passwordInfo.style.display = 'none';
     if (copyPasswordLink) copyPasswordLink.style.display = 'none';
+    lastSavedSnapshot = htmlInput ? htmlInput.value : '';
+    hasUnsavedChanges = false;
+    currentProjectDisplayName = (pagePayload.displayName || '').trim();
+    updateEditorModeUI();
   }
 
   async function selectProject(pageId) {
     if (!pageId) return;
-    currentPageId = pageId;
     try {
       const r = await fetch(`/api/pages/me/project/${encodeURIComponent(pageId)}`);
       const d = await r.json();
       if (!d.success || !d.page) throw new Error('加载失败');
+      currentPageId = pageId;
       const origin = window.location.origin;
       const shareUrl = `${origin}/view/${d.page.id}`;
       applyProjectToEditor({ ...d.page, id: d.page.id }, shareUrl);
@@ -257,6 +308,9 @@ document.addEventListener('DOMContentLoaded', () => {
       await refreshProjectsPanel();
     } catch (e) {
       showErrorToast('加载项目失败');
+      if (!currentPageId) {
+        updateEditorModeUI();
+      }
     }
   }
 
@@ -435,7 +489,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const row = ev.target.closest('.project-row');
     if (!row) return;
     const id = row.getAttribute('data-page-id');
-    if (id) selectProject(id);
+    if (!id) return;
+    if (id === currentPageId) return;
+    if (!confirmBeforeModeSwitch('编辑项目')) return;
+    selectProject(id);
   }
 
   const projectsListRoot = document.getElementById('projects-list');
@@ -791,6 +848,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const content = htmlInput.value;
       const codeType = detectCodeType(content);
       updateCodeTypeIndicator(codeType, content);
+      refreshUnsavedState();
       
       // 同步到高亮区域
       syncToTextarea();
@@ -909,8 +967,13 @@ document.addEventListener('DOMContentLoaded', () => {
             resultUrl.dataset.pageId = data.pageId || '';
           }
 
-          if (data.pageId) {
-            currentPageId = data.pageId;
+          if (currentPageId) {
+            lastSavedSnapshot = htmlInput ? htmlInput.value : '';
+            hasUnsavedChanges = false;
+          } else {
+            // 新建模式下每次都创建新项目，不自动绑定到编辑模式
+            lastSavedSnapshot = htmlInput ? htmlInput.value : '';
+            hasUnsavedChanges = false;
           }
           
           if (generatedPassword) {
@@ -975,7 +1038,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // 恢复按钮状态
-        generateButton.innerHTML = '<i class="fas fa-link mr-1"></i>生成链接';
+        updateEditorModeUI();
         generateButton.disabled = false;
         
         // 隐藏加载指示器
@@ -985,7 +1048,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showErrorToast('生成链接时发生错误');
         
         // 恢复按钮状态
-        generateButton.innerHTML = '<i class="fas fa-link mr-1"></i>生成链接';
+        updateEditorModeUI();
         generateButton.disabled = false;
         
         // 隐藏加载指示器
@@ -1169,10 +1232,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const newProjectBtn = document.getElementById('new-project-btn');
   if (newProjectBtn) {
     newProjectBtn.addEventListener('click', () => {
-      currentPageId = null;
-      showSuccessToast('已切换到新建模式：保存后将生成新的独立链接');
-      refreshProjectsPanel();
-      refreshVersionsPanel(null);
+      if (!currentPageId) {
+        showSuccessToast('当前已是新建模式');
+        return;
+      }
+      if (!confirmBeforeModeSwitch('新建项目')) return;
+      enterNewProjectMode(true);
+    });
+  }
+
+  if (exitEditModeBtn) {
+    exitEditModeBtn.addEventListener('click', () => {
+      if (!currentPageId) return;
+      if (!confirmBeforeModeSwitch('新建项目')) return;
+      enterNewProjectMode(true);
     });
   }
 
@@ -1183,9 +1256,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (openId) {
       sessionStorage.removeItem('quickshare-open-project');
       selectProject(openId);
+    } else {
+      enterNewProjectMode(false);
     }
   } catch (e) {
     /* ignore */
+    enterNewProjectMode(false);
   }
 
   // 初始化完成
