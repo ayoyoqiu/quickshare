@@ -14,11 +14,11 @@
         <h3 class="section-title" style="color: var(--primary); font-family: 'Orbitron', sans-serif; margin: 0;">
           <i class="fas fa-folder-open" style="margin-right: 8px; opacity: 0.85;"></i>全部项目
         </h3>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <a href="/" id="projects-go-home" class="cyber-btn cyber-btn-secondary" style="padding: 6px 14px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; text-decoration: none;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; position: relative; z-index: 20; pointer-events: auto;">
+          <a href="/" id="projects-go-home" onclick="window.location.href='/'; return false;" class="cyber-btn cyber-btn-secondary" style="padding: 6px 14px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; pointer-events: auto;">
             <i class="fas fa-arrow-left"></i> 返回编辑首页
           </a>
-          <a href="/logout" id="projects-logout" class="cyber-btn cyber-btn-secondary" style="padding: 6px 14px; font-size: 0.85rem; text-decoration: none;">
+          <a href="/logout" id="projects-logout" onclick="window.location.href='/logout'; return false;" class="cyber-btn cyber-btn-secondary" style="padding: 6px 14px; font-size: 0.85rem; text-decoration: none; pointer-events: auto;">
             <i class="fas fa-sign-out-alt"></i> 退出
           </a>
         </div>
