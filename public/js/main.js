@@ -214,6 +214,49 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function buildShareUrl(pageId, password) {
+    const base = `${window.location.origin}/view/${encodeURIComponent(pageId)}`;
+    if (!password) return base;
+    return `${base}?password=${encodeURIComponent(password)}`;
+  }
+
+  async function copyText(text, successMsg) {
+    try {
+      await navigator.clipboard.writeText(text);
+      showSuccessToast(successMsg);
+      return;
+    } catch (e) {
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        if (ok) showSuccessToast(successMsg);
+        else showErrorToast('复制失败');
+      } catch (err) {
+        showErrorToast('复制失败');
+      }
+    }
+  }
+
+  async function setProjectProtection(pageId, isProtected) {
+    const r = await fetch('/api/pages/me/protect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pageId, isProtected })
+    });
+    const d = await r.json();
+    if (!d.success) {
+      throw new Error(d.error || '设置失败');
+    }
+    return d;
+  }
+
   /** 当前选中的项目 pageId；null 表示下次保存会新建独立链接 */
   let currentPageId = null;
   let currentProjectDisplayName = '';
@@ -462,6 +505,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div style="margin-top: 6px; font-size: 0.8rem; color: var(--text-secondary); max-height: 2.6em; overflow: hidden;">${prev || '（无预览）'}</div>
               </div>
               <div style="display:flex; gap: 6px; flex-shrink: 0; align-items: center;">
+                <button type="button" class="cyber-btn cyber-btn-secondary project-copy-btn" data-page-id="${escHtml(row.id)}" style="padding: 4px 10px; font-size: 0.8rem;" title="复制链接">
+                  <i class="fas fa-copy"></i>
+                </button>
+                <button type="button" class="cyber-btn cyber-btn-secondary project-share-btn" data-page-id="${escHtml(row.id)}" style="padding: 4px 10px; font-size: 0.8rem;" title="分享链接">
+                  <i class="fas fa-share-alt"></i>
+                </button>
+                <button type="button" class="cyber-btn cyber-btn-secondary project-protect-btn" data-page-id="${escHtml(row.id)}" data-is-protected="${row.is_protected ? '1' : '0'}" style="padding: 4px 10px; font-size: 0.8rem;" title="密码保护">
+                  <i class="fas fa-shield-alt"></i>
+                </button>
                 <button type="button" class="cyber-btn cyber-btn-secondary project-rename-btn" data-page-id="${escHtml(row.id)}" data-display-name="${escHtml(dn)}" style="padding: 4px 10px; font-size: 0.8rem;" title="重命名">
                   <i class="fas fa-pen"></i>
                 </button>
@@ -477,6 +529,74 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function onProjectsListClick(ev) {
+    const copyBtn = ev.target.closest('.project-copy-btn');
+    if (copyBtn) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const pid = copyBtn.getAttribute('data-page-id');
+      if (pid) copyText(buildShareUrl(pid), '链接已复制');
+      return;
+    }
+
+    const shareBtn = ev.target.closest('.project-share-btn');
+    if (shareBtn) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const pid = shareBtn.getAttribute('data-page-id');
+      if (!pid) return;
+      const url = buildShareUrl(pid);
+      (async () => {
+        try {
+          if (navigator.share) {
+            await navigator.share({
+              title: 'LinkPaste 分享',
+              text: '这是我的 LinkPaste 项目链接',
+              url
+            });
+          } else {
+            await copyText(url, '当前浏览器不支持原生分享，已复制链接');
+          }
+        } catch (err) {
+          if (String(err && err.message || '').toLowerCase().includes('abort')) return;
+          showErrorToast('分享失败');
+        }
+      })();
+      return;
+    }
+
+    const protectBtn = ev.target.closest('.project-protect-btn');
+    if (protectBtn) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const pid = protectBtn.getAttribute('data-page-id');
+      const protectedNow = protectBtn.getAttribute('data-is-protected') === '1';
+      if (!pid) return;
+      if (protectedNow && !window.confirm('确定取消该项目的访问密码保护吗？')) return;
+      (async () => {
+        try {
+          const d = await setProjectProtection(pid, !protectedNow);
+          if (d.isProtected) {
+            const pwd = d.password || '';
+            const plain = buildShareUrl(pid);
+            const withPwd = buildShareUrl(pid, pwd);
+            const text = pwd
+              ? `链接: ${plain}\n密码: ${pwd}\n直达链接: ${withPwd}`
+              : `链接: ${plain}`;
+            await copyText(text, '已开启密码保护，并复制链接与密码');
+          } else {
+            showSuccessToast('已取消密码保护');
+          }
+          await refreshProjectsPanel();
+          if (currentPageId === pid) {
+            await selectProject(pid);
+          }
+        } catch (err) {
+          showErrorToast(err.message || '设置密码保护失败');
+        }
+      })();
+      return;
+    }
+
     const renameBtn = ev.target.closest('.project-rename-btn');
     if (renameBtn) {
       ev.preventDefault();

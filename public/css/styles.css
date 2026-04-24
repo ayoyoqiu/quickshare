@@ -271,24 +271,32 @@ body {
   flex: 0 auto;
 }
 
-/* 自定义滚动条样式 */
-.code-preview code::-webkit-scrollbar {
+/* 全局简洁滚动条（WebKit） */
+::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-.code-preview code::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.3);
-  border-radius: 4px;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.code-preview code::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.5);
-  border-radius: 4px;
+::-webkit-scrollbar-thumb {
+  background: rgba(var(--primary-rgb), 0.35);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
-.code-preview code::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.7);
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--primary-rgb), 0.55);
+  background-clip: padding-box;
+}
+
+/* Firefox 滚动条 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--primary-rgb), 0.45) transparent;
 }
 
 /* 标题样式 */
@@ -1211,24 +1219,7 @@ label[for="html-file"] {
   text-shadow: none;
 }
 
-/* 滚动条样式 */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--bg-input);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--primary);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--secondary);
-}
+/* 滚动条样式由上方全局简洁风统一管理 */
 
 /* 键盘焦点样式 */
 .keyboard-focus:focus {
@@ -1616,25 +1607,7 @@ label[for="html-file"] {
   text-decoration: underline;
 }
 
-/* 滚动条样式优化 */
-.code-preview code::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.code-preview code::-webkit-scrollbar-track {
-  background: rgba(var(--dark-rgb), 0.1);
-  border-radius: 3px;
-}
-
-.code-preview code::-webkit-scrollbar-thumb {
-  background: var(--primary);
-  border-radius: 3px;
-}
-
-.code-preview code::-webkit-scrollbar-thumb:hover {
-  background: var(--primary-dark);
-}
+/* 代码区域沿用全局滚动条，减少视觉噪音 */
 
 /* 代码编辑器缩放按钮 */
 .resize-btn {
