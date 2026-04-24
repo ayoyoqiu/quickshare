@@ -5,7 +5,10 @@
 
 // 加载 .env 文件中的环境变量（如果存在）
 try {
-  require('dotenv').config();
+  const path = require('path');
+  const dotenv = require('dotenv');
+  dotenv.config({ path: path.join(__dirname, '.env') });
+  dotenv.config({ path: path.join(__dirname, '.env.local'), override: true });
 } catch (e) {
   console.log('未找到 dotenv 模块或 .env 文件，使用默认环境变量');
 }
@@ -17,7 +20,7 @@ const config = {
   development: {
     port: process.env.PORT || 5678,
     logLevel: 'dev',
-    authEnabled: process.env.AUTH_ENABLED === 'true',
+    authEnabled: process.env.AUTH_ENABLED !== 'false',
     authPassword: process.env.AUTH_PASSWORD || 'admin123'
   },
 
@@ -25,7 +28,7 @@ const config = {
   production: {
     port: process.env.PORT || 8888,
     logLevel: 'combined',
-    authEnabled: process.env.AUTH_ENABLED === 'true',
+    authEnabled: process.env.AUTH_ENABLED !== 'false',
     authPassword: process.env.AUTH_PASSWORD || 'admin123'
   },
 
@@ -33,7 +36,7 @@ const config = {
   test: {
     port: process.env.PORT || 3000,
     logLevel: 'dev',
-    authEnabled: process.env.AUTH_ENABLED === 'true',
+    authEnabled: process.env.AUTH_ENABLED !== 'false',
     authPassword: process.env.AUTH_PASSWORD || 'admin123'
   }
 };

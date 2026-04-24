@@ -1,8 +1,10 @@
-// 加载环境变量
-require('dotenv').config();
+// 加载环境变量（优先读取 .env.local，兼容本地与线上）
+const dotenv = require('dotenv');
+const path = require('path');
+dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config({ path: path.join(__dirname, '.env.local'), override: true });
 
 const express = require('express');
-const path = require('path');
 const bodyParser = require('body-parser');
 const morgan = require('morgan');
 const cors = require('cors');
@@ -11,17 +13,9 @@ const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const { initDatabase, pool } = require('./models/db');
 
-// 添加调试日志
-console.log('应用启动...');
-console.log('当前工作目录:', process.cwd());
-console.log('环境变量:', {
-  NODE_ENV: process.env.NODE_ENV,
-  AUTH_ENABLED: process.env.AUTH_ENABLED,
-  AUTH_PASSWORD: process.env.AUTH_PASSWORD
-});
-
 // 导入认证中间件
 const { isAuthenticated } = require('./middleware/auth');
+const { createUser, findUserByUsername, verifyPassword } = require('./models/users');
 
 // 导入配置
 const config = require('./config');
@@ -31,6 +25,8 @@ const pagesRoutes = require('./routes/pages');
 
 // 初始化应用
 const app = express();
+// Vercel/反向代理环境下，允许正确识别 HTTPS，以便设置 secure cookie
+app.set('trust proxy', 1);
 // 优先使用环境变量 PORT（Railway 会动态注入），其次用配置文件端口
 const PORT = process.env.PORT || config.port;
 
@@ -69,58 +65,105 @@ app.set('view engine', 'ejs');
 // 登录路由
 app.get('/login', (req, res) => {
   // 如果认证功能未启用或已经登录，重定向到首页
-  if (!config.authEnabled || (req.session && req.session.isAuthenticated)) {
+  if (!config.authEnabled || (req.session && req.session.user?.id)) {
     return res.redirect('/');
   }
 
   res.render('login', {
     title: 'LinkPaste AI | 登录',
-    error: null
+    error: null,
+    mode: 'login'
   });
 });
 
-app.post('/login', (req, res) => {
-  const { password } = req.body;
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
 
-  console.log('登录尝试:');
-  console.log('- 密码匹配检查');
-
-  // 如果认证功能未启用，直接重定向到首页
   if (!config.authEnabled) {
-    console.log('- 认证未启用，直接重定向到首页');
     return res.redirect('/');
   }
 
-  // 支持主密码和共享密码两个入口
-  const sharePassword = process.env.SHARE_PASSWORD;
-  const isValid = password === config.authPassword || (sharePassword && password === sharePassword);
-
-  if (isValid) {
-    console.log('- 密码正确，设置认证');
-
-    // 同时使用会话和 Cookie 来存储认证状态
-    // 1. 设置会话
-    req.session.isAuthenticated = true;
-    console.log('- 设置会话认证标记');
-
-    // 2. 设置 Cookie
-    res.cookie('auth', 'true', {
-      maxAge: 24 * 60 * 60 * 1000, // 24小时
-      httpOnly: true,
-      secure: false, // 如果使用 HTTPS，设置为 true
-      sameSite: 'lax'
-    });
-    console.log('- 设置认证 Cookie');
-
-    // 先尝试直接重定向，不等待会话保存
-    console.log('- 重定向到首页');
-    return res.redirect('/');
-  } else {
-    console.log('- 密码不匹配，显示错误');
-    // 密码错误，显示错误信息
+  if (!username || !password) {
     res.render('login', {
       title: 'LinkPaste AI | 登录',
-      error: '密码错误，请重试'
+      error: '请输入用户名和密码',
+      mode: 'login'
+    });
+    return;
+  }
+
+  try {
+    const user = await findUserByUsername(username);
+    if (!user || !verifyPassword(password, user.password_hash)) {
+      res.render('login', {
+        title: 'LinkPaste AI | 登录',
+        error: '用户名或密码错误',
+        mode: 'login'
+      });
+      return;
+    }
+
+    req.session.user = { id: user.id, username: user.username };
+    return res.redirect('/');
+  } catch (error) {
+    console.error('登录错误:', error);
+    res.render('login', {
+      title: 'LinkPaste AI | 登录',
+      error: '登录失败，请稍后重试',
+      mode: 'login'
+    });
+  }
+});
+
+app.get('/register', (req, res) => {
+  if (!config.authEnabled || (req.session && req.session.user?.id)) {
+    return res.redirect('/');
+  }
+
+  res.render('login', {
+    title: 'LinkPaste AI | 注册',
+    error: null,
+    mode: 'register'
+  });
+});
+
+app.post('/register', async (req, res) => {
+  if (!config.authEnabled) {
+    return res.redirect('/');
+  }
+
+  const username = (req.body.username || '').trim().toLowerCase();
+  const { password } = req.body;
+
+  if (!/^[a-z0-9_]{3,20}$/.test(username)) {
+    res.render('login', {
+      title: 'LinkPaste AI | 注册',
+      error: '用户名需为 3-20 位，仅支持小写字母/数字/下划线',
+      mode: 'register'
+    });
+    return;
+  }
+
+  if (!password || password.length < 8) {
+    res.render('login', {
+      title: 'LinkPaste AI | 注册',
+      error: '密码至少 8 位',
+      mode: 'register'
+    });
+    return;
+  }
+
+  try {
+    const user = await createUser(username, password);
+    req.session.user = { id: user.id, username: user.username };
+    return res.redirect('/');
+  } catch (error) {
+    console.error('注册错误:', error);
+    const duplicated = String(error.message || '').includes('duplicate key');
+    res.render('login', {
+      title: 'LinkPaste AI | 注册',
+      error: duplicated ? '用户名已存在，请更换' : '注册失败，请稍后重试',
+      mode: 'register'
     });
   }
 });
@@ -128,20 +171,22 @@ app.post('/login', (req, res) => {
 // 退出登录路由
 app.get('/logout', (req, res) => {
   // 清除会话
-  req.session.destroy();
-  res.redirect('/login');
+  req.session.destroy(() => {
+    res.redirect('/login');
+  });
 });
 
 // API 路由设置
 // 将 API 路由分为两部分：需要认证的和不需要认证的
 
 // 导入路由处理函数
-const { createPage, getPageById, getRecentPages } = require('./models/pages');
+const { createUserProject, updateUserProject, getPageById, getPageByUserId } = require('./models/pages');
 
-// 创建页面的 API 需要认证
+// 创建 / 更新项目（有 pageId 则更新该链接对应项目，否则新建独立链接）
 app.post('/api/pages/create', isAuthenticated, async (req, res) => {
   try {
-    const { htmlContent, isProtected } = req.body;
+    const { pageId: bodyPageId, htmlContent, isProtected, codeType } = req.body;
+    const userId = req.session.user.id;
 
     if (!htmlContent) {
       return res.status(400).json({
@@ -150,15 +195,32 @@ app.post('/api/pages/create', isAuthenticated, async (req, res) => {
       });
     }
 
-    const result = await createPage(htmlContent, isProtected);
+    const ct = codeType || 'html';
+    let result;
+    if (bodyPageId && String(bodyPageId).trim()) {
+      result = await updateUserProject(userId, String(bodyPageId).trim(), htmlContent, isProtected, ct);
+    } else {
+      result = await createUserProject(userId, htmlContent, isProtected, ct);
+    }
+
+    const shareUrl = `${req.protocol}://${req.get('host')}/view/${result.pageId}`;
 
     res.json({
       success: true,
-      urlId: result.urlId,
+      pageId: result.pageId,
+      userId: result.userId,
+      shareUrl,
       password: result.password,
-      isProtected: !!result.password
+      isProtected: result.isProtected,
+      versionNumber: result.versionNumber
     });
   } catch (error) {
+    if (error.code === 'PAGE_NOT_FOUND') {
+      return res.status(404).json({
+        success: false,
+        error: '项目不存在或无权编辑'
+      });
+    }
     console.error('创建页面API错误:', error);
     res.status(500).json({
       success: false,
@@ -205,12 +267,127 @@ app.get('/', isAuthenticated, (req, res) => {
 
 // 导入代码类型检测和内容渲染工具
 const { detectCodeType, CODE_TYPES } = require('./utils/codeDetector');
-const { renderContent, escapeHtml } = require('./utils/contentRenderer');
+const { renderContent } = require('./utils/contentRenderer');
 
-// 查看页面路由 - 无需登录即可访问
+async function renderSharedPage(req, res, page) {
+  // 检查是否需要密码验证
+  if (page.is_protected === 1) {
+    const { password } = req.query;
+
+    // 如果没有提供密码或密码不正确，显示密码输入页面
+    if (!password || password !== page.password) {
+      return res.render('password', {
+        title: 'LinkPaste AI | 密码保护',
+        id: req.params.id || req.params.userId,
+        error: password ? '密码错误，请重试' : null
+      });
+    }
+  }
+
+  // 始终重新检测内容类型，确保正确渲染
+  const validTypes = ['html', 'markdown', 'svg', 'mermaid'];
+
+  // 打印原始内容的前100个字符，帮助调试
+  console.log(`原始内容前100字符: ${page.html_content.substring(0, 100)}...`);
+
+  // 先用类型检测判断内容类型
+  let detectedType = detectCodeType(page.html_content);
+
+  // 安全检查: 如果内容以 <!DOCTYPE html> 或 <html 开头，强制识别为 HTML
+  if (page.html_content.trim().startsWith('<!DOCTYPE html>') ||
+      page.html_content.trim().startsWith('<html')) {
+    detectedType = 'html';
+    console.log('[DEBUG] 强制识别为完整HTML文档');
+  }
+
+  let processedContent = page.html_content;
+
+  // Markdown 内容直接渲染，不做代码块提取（否则文档里的代码块会被拆散）
+  if (detectedType !== 'markdown') {
+    // 导入代码块提取函数，仅对非 Markdown 内容处理
+    const { extractCodeBlocks } = require('./utils/codeDetector');
+    const codeBlocks = extractCodeBlocks(page.html_content);
+
+    if (codeBlocks.length > 0) {
+      console.log(`[DEBUG] 找到${codeBlocks.length}个代码块`);
+
+      // 如果只有一个代码块且几乎占据全部内容，直接使用该代码块的内容和类型
+      if (codeBlocks.length === 1 &&
+          codeBlocks[0].content.length > page.html_content.length * 0.7) {
+        processedContent = codeBlocks[0].content;
+        detectedType = codeBlocks[0].type;
+        console.log(`[DEBUG] 使用单个代码块内容，类型: ${detectedType}`);
+      }
+      // 多个代码块：检查是否是纯 Mermaid
+      else if (codeBlocks.length > 1) {
+        // 检查是否是纯 Mermaid 语法
+        const mermaidPatterns = [
+          /^\s*graph\s+[A-Za-z\s]/i,
+          /^\s*flowchart\s+[A-Za-z\s]/i,
+          /^\s*sequenceDiagram/i,
+          /^\s*classDiagram/i,
+          /^\s*gantt/i,
+          /^\s*pie/i,
+          /^\s*erDiagram/i,
+          /^\s*journey/i,
+          /^\s*stateDiagram/i,
+          /^\s*gitGraph/i
+        ];
+        const trimmedContent = page.html_content.trim();
+        const isPureMermaid = mermaidPatterns.some(p => p.test(trimmedContent));
+        if (isPureMermaid) {
+          detectedType = 'mermaid';
+          console.log('[DEBUG] 检测到纯 Mermaid 语法');
+        }
+        // 其他多代码块情况保持原始内容，按原类型渲染
+      }
+    } else {
+      // 检查是否是纯 Mermaid 语法
+      const mermaidPatterns = [
+        /^\s*graph\s+[A-Za-z\s]/i,
+        /^\s*flowchart\s+[A-Za-z\s]/i,
+        /^\s*sequenceDiagram/i,
+        /^\s*classDiagram/i,
+        /^\s*gantt/i,
+        /^\s*pie/i,
+        /^\s*erDiagram/i,
+        /^\s*journey/i,
+        /^\s*stateDiagram/i,
+        /^\s*gitGraph/i
+      ];
+      const trimmedContent = page.html_content.trim();
+      const isPureMermaid = mermaidPatterns.some(p => p.test(trimmedContent));
+      if (isPureMermaid) {
+        detectedType = 'mermaid';
+        console.log('[DEBUG] 检测到纯 Mermaid 语法，强制设置为 mermaid 类型');
+      }
+    }
+  }
+
+  console.log(`检测到的内容类型: ${detectedType}`);
+  console.log(`数据库中的内容类型: ${page.code_type}`);
+
+  // 使用检测到的类型，确保正确渲染
+  const contentType = validTypes.includes(detectedType) ? detectedType : 'html';
+
+  // 根据不同的内容类型进行渲染
+  const renderedContent = await renderContent(processedContent, contentType);
+
+  // 在渲染内容中添加代码类型信息
+  // 使用正则表达式在 head 标签结束前添加一个元数据标签
+  const contentWithTypeInfo = renderedContent.replace(
+    '</head>',
+    `<meta name="code-type" content="${contentType}">
+</head>`
+  );
+
+  // 返回渲染后的内容
+  return res.send(contentWithTypeInfo);
+}
+
+// 查看页面路由 - 无需登录即可访问（兼容旧链接）
 app.get('/view/:id', async (req, res) => {
   try {
-    const { getPageById } = require('./models/pages');
     const { id } = req.params;
     const page = await getPageById(id);
 
@@ -221,137 +398,7 @@ app.get('/view/:id', async (req, res) => {
       });
     }
 
-    // 检查是否需要密码验证
-    if (page.is_protected === 1) {
-      const { password } = req.query;
-
-      // 如果没有提供密码或密码不正确，显示密码输入页面
-      if (!password || password !== page.password) {
-        return res.render('password', {
-          title: 'LinkPaste AI | 密码保护',
-          id: id,
-          error: password ? '密码错误，请重试' : null
-        });
-      }
-    }
-
-    // 始终重新检测内容类型，确保正确渲染
-    const validTypes = ['html', 'markdown', 'svg', 'mermaid'];
-
-    // 打印原始内容的前100个字符，帮助调试
-    console.log(`原始内容前100字符: ${page.html_content.substring(0, 100)}...`);
-
-    // 导入代码块提取函数
-    const { extractCodeBlocks } = require('./utils/codeDetector');
-
-    // 尝试提取代码块
-    const codeBlocks = extractCodeBlocks(page.html_content);
-
-    // 如果找到代码块，处理它们
-    let processedContent = page.html_content;
-    let detectedType = 'html'; // 默认类型为HTML
-
-    if (codeBlocks.length > 0) {
-      console.log(`[DEBUG] 找到${codeBlocks.length}个代码块`);
-
-      // 如果只有一个代码块，并且它几乎占据了整个内容，直接使用该代码块的内容和类型
-      if (codeBlocks.length === 1 &&
-          codeBlocks[0].content.length > page.html_content.length * 0.7) {
-        processedContent = codeBlocks[0].content;
-        detectedType = codeBlocks[0].type;
-        console.log(`[DEBUG] 使用单个代码块内容，类型: ${detectedType}`);
-      }
-      // 如果有多个代码块，创建一个HTML文档来包含所有代码块
-      else if (codeBlocks.length > 1) {
-        // 创建一个HTML文档，包含所有代码块
-        let htmlContent = '<!DOCTYPE html>\n<html>\n<head>\n<meta charset="UTF-8">\n';
-        htmlContent += '<title>多代码块内容</title>\n';
-        htmlContent += '<style>\n';
-        htmlContent += '.code-block { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }\n';
-        htmlContent += '.code-block-header { font-weight: bold; margin-bottom: 10px; }\n';
-        htmlContent += '</style>\n';
-        htmlContent += '</head>\n<body>\n';
-
-        // 为每个代码块创建一个div
-        codeBlocks.forEach((block, index) => {
-          htmlContent += `<div class="code-block">\n`;
-          htmlContent += `<div class="code-block-header">代码块 ${index + 1} (${block.originalType})</div>\n`;
-
-          // 根据代码块类型渲染内容
-          if (block.type === 'mermaid') {
-            htmlContent += `<div class="mermaid">\n${block.content}\n</div>\n`;
-          } else if (block.type === 'svg') {
-            htmlContent += block.content;
-          } else if (block.type === 'html') {
-            htmlContent += block.content;
-          } else {
-            // 对于其他类型，使用pre标签
-            htmlContent += `<pre>\n${block.content}\n</pre>\n`;
-          }
-
-          htmlContent += '</div>\n';
-        });
-
-        htmlContent += '</body>\n</html>';
-        processedContent = htmlContent;
-        detectedType = 'html';
-        console.log('[DEBUG] 创建了包含多个代码块的HTML文档');
-      }
-    } else {
-      // 没有找到代码块，使用原始的检测逻辑
-      // 检查是否是 Mermaid 图表
-      const mermaidPatterns = [
-        /^\s*graph\s+[A-Za-z\s]/i,        // 流程图 (包括 graph TD)
-        /^\s*flowchart\s+[A-Za-z\s]/i,    // 流程图 (新语法)
-        /^\s*sequenceDiagram/i,           // 序列图
-        /^\s*classDiagram/i,              // 类图
-        /^\s*gantt/i,                    // 甘特图
-        /^\s*pie/i,                      // 饼图
-        /^\s*erDiagram/i,                // ER图
-        /^\s*journey/i,                  // 用户旅程图
-        /^\s*stateDiagram/i,             // 状态图
-        /^\s*gitGraph/i                  // Git图
-      ];
-
-      // 检查是否是纯 Mermaid 语法
-      const trimmedContent = page.html_content.trim();
-      const isPureMermaid = mermaidPatterns.some(pattern => pattern.test(trimmedContent));
-
-      // 使用detectCodeType函数检测内容类型
-      detectedType = detectCodeType(page.html_content);
-
-      // 安全检查: 如果内容以<!DOCTYPE html>或<html开头，强制识别为HTML
-      if (page.html_content.trim().startsWith('<!DOCTYPE html>') ||
-          page.html_content.trim().startsWith('<html')) {
-        console.log('[DEBUG] 强制识别为完整HTML文档');
-        detectedType = 'html';
-      }
-      // 如果是纯 Mermaid 语法，强制设置为 mermaid 类型
-      else if (isPureMermaid) {
-        console.log('[DEBUG] 检测到纯 Mermaid 语法，强制设置为 mermaid 类型');
-        detectedType = 'mermaid';
-      }
-    }
-
-    console.log(`检测到的内容类型: ${detectedType}`);
-    console.log(`数据库中的内容类型: ${page.code_type}`);
-
-    // 使用检测到的类型，确保正确渲染
-    const contentType = validTypes.includes(detectedType) ? detectedType : 'html';
-
-    // 根据不同的内容类型进行渲染
-    const renderedContent = await renderContent(processedContent, contentType);
-
-    // 在渲染内容中添加代码类型信息
-    // 使用正则表达式在 head 标签结束前添加一个元数据标签
-    const contentWithTypeInfo = renderedContent.replace(
-      '</head>',
-      `<meta name="code-type" content="${contentType}">
-</head>`
-    );
-
-    // 返回渲染后的内容
-    res.send(contentWithTypeInfo);
+    return await renderSharedPage(req, res, page);
   } catch (error) {
     console.error('查看页面错误:', error);
     res.status(500).render('error', {
@@ -361,7 +408,33 @@ app.get('/view/:id', async (req, res) => {
   }
 });
 
-// 注意：escapeHtml函数已经从 contentRenderer.js 导入，这里不需要重复定义
+app.get('/u/:userId', async (req, res) => {
+  try {
+    const userId = Number(req.params.userId);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(404).render('error', {
+        title: '页面未找到',
+        message: '链接无效'
+      });
+    }
+
+    const page = await getPageByUserId(userId);
+    if (!page) {
+      return res.status(404).render('error', {
+        title: '页面未找到',
+        message: '该用户尚未发布内容'
+      });
+    }
+
+    return await renderSharedPage(req, res, page);
+  } catch (error) {
+    console.error('查看页面错误:', error);
+    res.status(500).render('error', {
+      title: '服务器错误',
+      message: '查看页面时发生错误，请稍后再试'
+    });
+  }
+});
 
 // 错误处理
 app.use((req, res) => {

@@ -1,6 +1,54 @@
 // HTML-GO 主要JavaScript文件
 // 处理所有用户交互和功能
 
+// ============================================================
+// Markdown 12种主题配置（首页选择器用）
+// ============================================================
+const MD_THEMES = [
+  { id: 'bytedance', label: '科技蓝', colors: ['#1677ff', '#05d4cd'] },
+  { id: 'lavender',  label: '梦幻紫', colors: ['#9B8EC7', '#BDA6CE', '#F2EAE0'] },
+  { id: 'forest',    label: '自然绿', colors: ['#9AB17A', '#C3CC9B', '#FBE8CE'] },
+  { id: 'aqua',      label: '清空蓝', colors: ['#71C9CE', '#A6E3E9', '#E3FDFD'] },
+  { id: 'ocean',     label: '商务蓝', colors: ['#3F72AF', '#112D4E', '#DBE2EF'] },
+  { id: 'sakura',    label: '樱花粉', colors: ['#e8709a', '#F2BED1', '#F9F5F6'] },
+  { id: 'mist',      label: '海雾',   colors: ['#6096B4', '#93BFCF', '#EEE9DA'] },
+  { id: 'midnight',  label: '星夜',   colors: ['#FF85BB', '#FFCEE3', '#021A54'] },
+  { id: 'geek',      label: '极客黑', colors: ['#00ADB5', '#393E46', '#222831'] },
+  { id: 'peach',     label: '蜜桃橙', colors: ['#FF9494', '#FFD1D1', '#FFF5E4'] },
+  { id: 'rose',      label: '玫瑰紫', colors: ['#8785A2', '#FFC7C7', '#F6F6F6'] },
+  { id: 'dream',     label: '梦境紫', colors: ['#424874', '#A6B1E1', '#F4EEFF'] },
+];
+
+// 当前首页选中的 Markdown 风格（默认 bytedance）
+let selectedMdTheme = localStorage.getItem('md-theme') || 'bytedance';
+if (!MD_THEMES.find(t => t.id === selectedMdTheme)) selectedMdTheme = 'bytedance';
+
+function buildSwatchStyle(colors) {
+  if (colors.length === 1) return 'background:' + colors[0];
+  const stops = colors.map((c, i) => c + ' ' + Math.round(i * 100 / (colors.length - 1)) + '%').join(',');
+  return 'background:linear-gradient(135deg,' + stops + ')';
+}
+
+function renderMdThemeSelector() {
+  const container = document.getElementById('md-theme-swatches');
+  if (!container) return;
+  container.innerHTML = MD_THEMES.map(t => `
+    <div class="md-swatch-item${t.id === selectedMdTheme ? ' active' : ''}" data-theme-id="${t.id}" title="${t.label}">
+      <div class="md-swatch-circle" style="${buildSwatchStyle(t.colors)}"></div>
+      <span class="md-swatch-name">${t.label}</span>
+    </div>
+  `).join('');
+
+  container.querySelectorAll('.md-swatch-item').forEach(el => {
+    el.addEventListener('click', () => {
+      selectedMdTheme = el.dataset.themeId;
+      localStorage.setItem('md-theme', selectedMdTheme);
+      container.querySelectorAll('.md-swatch-item').forEach(x => x.classList.remove('active'));
+      el.classList.add('active');
+    });
+  });
+}
+
 // 错误提示功能
 function showErrorToast(message) {
   const errorToast = document.getElementById('error-toast');
@@ -134,10 +182,212 @@ document.addEventListener('DOMContentLoaded', () => {
       const id = path.split('/').pop();
       
       // 创建带样式的 URL 显示
-      return `<span style="color: var(--text-secondary);">${urlObj.origin}</span><span style="color: var(--primary);">/view/</span><span style="color: var(--accent); font-weight: bold;">${id}</span>`;
+      const styledPath = path.startsWith('/u/')
+        ? `<span style="color: var(--primary);">/u/</span><span style="color: var(--accent); font-weight: bold;">${id}</span>`
+        : `<span style="color: var(--primary);">/view/</span><span style="color: var(--accent); font-weight: bold;">${id}</span>`;
+      return `<span style="color: var(--text-secondary);">${urlObj.origin}</span>${styledPath}`;
     } catch (e) {
       return url; // 如果解析失败，返回原始 URL
     }
+  }
+
+  function formatVersionTime(ts) {
+    if (ts == null || ts === '') return '';
+    try {
+      return new Date(Number(ts)).toLocaleString('zh-CN');
+    } catch (e) {
+      return String(ts);
+    }
+  }
+
+  /** 当前选中的项目 pageId；null 表示下次保存会新建独立链接 */
+  let currentPageId = null;
+
+  function applyProjectToEditor(pagePayload, shareUrl) {
+    if (!pagePayload) return;
+    if (htmlInput) {
+      htmlInput.value = pagePayload.htmlContent || '';
+      syncToTextarea();
+    }
+    if (passwordToggle) {
+      passwordToggle.checked = !!pagePayload.isProtected;
+    }
+    if (resultUrl && shareUrl) {
+      const detectedForUrl = detectCodeType(htmlInput ? htmlInput.value : '');
+      const themeParam = (detectedForUrl === 'markdown' && selectedMdTheme && selectedMdTheme !== 'bytedance')
+        ? `?theme=${selectedMdTheme}` : '';
+      const url = `${shareUrl}${themeParam}`;
+      resultUrl.innerHTML = formatUrl(url);
+      resultUrl.dataset.originalUrl = url;
+      resultUrl.dataset.pageId = pagePayload.id || currentPageId || '';
+    }
+    if (resultSection) {
+      resultSection.style.display = 'block';
+    }
+    if (generatedPassword) {
+      generatedPassword.textContent = '';
+    }
+    if (passwordInfo) passwordInfo.style.display = 'none';
+    if (copyPasswordLink) copyPasswordLink.style.display = 'none';
+  }
+
+  async function selectProject(pageId) {
+    if (!pageId) return;
+    currentPageId = pageId;
+    try {
+      const r = await fetch(`/api/pages/me/project/${encodeURIComponent(pageId)}`);
+      const d = await r.json();
+      if (!d.success || !d.page) throw new Error('加载失败');
+      const origin = window.location.origin;
+      const shareUrl = `${origin}/view/${d.page.id}`;
+      applyProjectToEditor({ ...d.page, id: d.page.id }, shareUrl);
+      await refreshVersionsPanel(pageId);
+      await refreshProjectsPanel();
+    } catch (e) {
+      showErrorToast('加载项目失败');
+    }
+  }
+
+  async function refreshVersionsPanel(pageId) {
+    const versionsList = document.getElementById('versions-list');
+    const versionsEmpty = document.getElementById('versions-empty');
+    if (!versionsList) return;
+
+    if (!pageId) {
+      versionsList.innerHTML = '';
+      if (versionsEmpty) versionsEmpty.style.display = 'block';
+      return;
+    }
+
+    try {
+      const vRes = await fetch(`/api/pages/me/versions?limit=25&pageId=${encodeURIComponent(pageId)}`);
+      const v = await vRes.json();
+      const versions = (v.success && v.versions) ? v.versions : [];
+      if (versionsEmpty) {
+        versionsEmpty.style.display = versions.length ? 'none' : 'block';
+      }
+
+      versionsList.innerHTML = versions.map((row) => {
+        const raw = row.preview || '';
+        const prev = raw.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const lock = row.is_protected ? '<i class="fas fa-lock" title="该快照含访问密码"></i> ' : '';
+        return `
+          <div class="version-row" style="border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;">
+            <div style="display:flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap;">
+              <div>
+                <strong>v${row.version_number}</strong> ${lock}<span style="color: var(--text-secondary); font-size: 0.85rem;">${formatVersionTime(row.created_at)}</span>
+                <div style="margin-top: 6px; font-size: 0.8rem; color: var(--text-secondary); max-height: 3em; overflow: hidden;">${prev || '（无预览）'}</div>
+              </div>
+              <div style="display:flex; gap: 6px; flex-shrink: 0;">
+                <button type="button" class="cyber-btn cyber-btn-secondary version-load" data-v="${row.version_number}" style="padding: 4px 10px; font-size: 0.8rem;">载入编辑</button>
+                <button type="button" class="cyber-btn cyber-btn-primary version-restore" data-v="${row.version_number}" style="padding: 4px 10px; font-size: 0.8rem;">恢复线上</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      versionsList.querySelectorAll('.version-load').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const vn = btn.getAttribute('data-v');
+          try {
+            const r = await fetch(`/api/pages/me/versions/${vn}?pageId=${encodeURIComponent(pageId)}`);
+            const d = await r.json();
+            if (!d.success || !d.version) throw new Error('加载失败');
+            if (htmlInput) {
+              htmlInput.value = d.version.htmlContent;
+              syncToTextarea();
+              showSuccessToast(`已载入 v${vn} 到编辑器`);
+            }
+          } catch (e) {
+            showErrorToast('载入版本失败');
+          }
+        });
+      });
+
+      versionsList.querySelectorAll('.version-restore').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const vn = btn.getAttribute('data-v');
+          if (!confirm(`确定将 v${vn} 恢复为当前线上展示内容？\n该项目的分享链接不变，并会新增一条版本记录。`)) return;
+          try {
+            const r = await fetch(`/api/pages/me/versions/${vn}/restore`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pageId })
+            });
+            const d = await r.json();
+            if (!d.success) throw new Error(d.error || '恢复失败');
+            showSuccessToast(`已恢复为 v${vn}，新版本号为 v${d.newVersionNumber}`);
+            await selectProject(pageId);
+          } catch (e) {
+            showErrorToast('恢复失败');
+          }
+        });
+      });
+    } catch (e) {
+      console.error('刷新版本列表失败:', e);
+    }
+  }
+
+  async function refreshProjectsPanel() {
+    const assetMeta = document.getElementById('asset-meta');
+    const projectsList = document.getElementById('projects-list');
+    const projectsEmpty = document.getElementById('projects-empty');
+    if (!projectsList) return;
+
+    try {
+      const [aRes, pRes] = await Promise.all([
+        fetch('/api/pages/me/asset'),
+        fetch('/api/pages/me/projects?limit=50')
+      ]);
+      const a = await aRes.json();
+      const p = await pRes.json();
+
+      if (!a.success || !p.success) return;
+
+      if (assetMeta) {
+        assetMeta.textContent = `共 ${a.asset.projectCount} 个项目 · 选中后可编辑并保存（链接不变），未选中时保存会新建独立链接`;
+      }
+
+      const projects = p.projects || [];
+      if (projectsEmpty) {
+        projectsEmpty.style.display = projects.length ? 'none' : 'block';
+      }
+
+      projectsList.innerHTML = projects.map((row) => {
+        const raw = row.preview || '';
+        const prev = raw.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const active = currentPageId && row.id === currentPageId;
+        const border = active ? '2px solid var(--accent)' : '1px solid var(--border-color)';
+        const lock = row.is_protected ? '<i class="fas fa-lock" style="margin-left:6px;" title="访问密码"></i>' : '';
+        return `
+          <div class="project-row" data-page-id="${row.id}" style="border: ${border}; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer;">
+            <div style="display:flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap;">
+              <div>
+                <strong>/view/${row.id}</strong>${lock}
+                <div style="margin-top: 4px; font-size: 0.85rem; color: var(--text-secondary);">${formatVersionTime(row.created_at)}</div>
+                <div style="margin-top: 6px; font-size: 0.8rem; color: var(--text-secondary); max-height: 2.6em; overflow: hidden;">${prev || '（无预览）'}</div>
+              </div>
+              <span class="cyber-btn cyber-btn-secondary" style="padding: 4px 10px; font-size: 0.8rem; pointer-events: none;">打开编辑</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      projectsList.onclick = (ev) => {
+        const row = ev.target.closest('.project-row');
+        if (!row) return;
+        const id = row.getAttribute('data-page-id');
+        if (id) selectProject(id);
+      };
+    } catch (e) {
+      console.error('刷新项目列表失败:', e);
+    }
+  }
+
+  async function refreshAssetPanel() {
+    await refreshProjectsPanel();
+    await refreshVersionsPanel(currentPageId);
   }
   
   // 文件上传处理
@@ -205,14 +455,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (copyPasswordLink) copyPasswordLink.style.display = 'inline-block';
         
         // 更新数据库状态为需要密码才能访问
+        const pid = resultUrl.dataset.pageId;
+        if (!pid) {
+          showErrorToast('请先保存或选择项目');
+          passwordToggle.checked = false;
+          return;
+        }
         try {
-          const urlId = resultUrl.dataset.originalUrl.split('/').pop();
-          await fetch(`/api/pages/${urlId}/protect`, {
+          await fetch('/api/pages/me/protect', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ isProtected: true }),
+            body: JSON.stringify({ pageId: pid, isProtected: true }),
           });
         } catch (error) {
           console.error('更新保护状态错误:', error);
@@ -222,15 +477,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (passwordInfo) passwordInfo.style.display = 'none';
         if (copyPasswordLink) copyPasswordLink.style.display = 'none';
         
-        // 更新数据库状态为不需要密码就能访问
+        const pidOff = resultUrl.dataset.pageId;
+        if (!pidOff) {
+          return;
+        }
         try {
-          const urlId = resultUrl.dataset.originalUrl.split('/').pop();
-          await fetch(`/api/pages/${urlId}/protect`, {
+          await fetch('/api/pages/me/protect', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ isProtected: false }),
+            body: JSON.stringify({ pageId: pidOff, isProtected: false }),
           });
         } catch (error) {
           console.error('更新保护状态错误:', error);
@@ -454,6 +711,17 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 更新文本
     codeTypeText.textContent = label;
+
+    // 显示/隐藏 Markdown 风格选择器
+    const mdThemeSelector = document.getElementById('md-theme-selector');
+    if (mdThemeSelector) {
+      if (codeType === 'markdown') {
+        mdThemeSelector.style.display = 'block';
+        renderMdThemeSelector();
+      } else {
+        mdThemeSelector.style.display = 'none';
+      }
+    }
   }
 
   // 初始化代码编辑器
@@ -549,19 +817,29 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('检测到的代码类型:', codeType);
         
         // 调用 API 生成链接
+        const payload = { htmlContent, isProtected, codeType };
+        if (currentPageId) {
+          payload.pageId = currentPageId;
+        }
+
         const response = await fetch('/api/pages/create', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ htmlContent, isProtected, codeType }),
+          body: JSON.stringify(payload),
         });
         
         const data = await response.json();
         console.log('API响应数据:', data); // 调试输出
         
         if (data.success) {
-          const url = `${window.location.origin}/view/${data.urlId}`;
+          // 如果是 Markdown 且选了非默认风格，将风格附加到 URL 参数
+          const detectedForUrl = detectCodeType(htmlContent);
+          const themeParam = (detectedForUrl === 'markdown' && selectedMdTheme && selectedMdTheme !== 'bytedance')
+            ? `?theme=${selectedMdTheme}` : '';
+          const baseUrl = data.shareUrl || `${window.location.origin}/view/${data.pageId}`;
+          const url = `${baseUrl}${themeParam}`;
           
           // 格式化 URL 显示
           const formattedUrl = formatUrl(url);
@@ -570,11 +848,19 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // 保存原始 URL 用于复制和预览
             resultUrl.dataset.originalUrl = url;
+            resultUrl.dataset.pageId = data.pageId || '';
+          }
+
+          if (data.pageId) {
+            currentPageId = data.pageId;
           }
           
-          // 无论是否启用了密码保护，都保存密码
           if (generatedPassword) {
-            generatedPassword.textContent = data.password;
+            if (data.isProtected && data.password) {
+              generatedPassword.textContent = data.password;
+            } else {
+              generatedPassword.textContent = '';
+            }
           }
           console.log('生成的密码:', data.password); // 调试输出
           
@@ -622,6 +908,8 @@ document.addEventListener('DOMContentLoaded', () => {
           
           // 隐藏加载指示器
           loadingIndicator.classList.remove('show');
+
+          await refreshAssetPanel();
           
           // 不需要显示生成链接的toast提示
         } else {
@@ -809,6 +1097,28 @@ document.addEventListener('DOMContentLoaded', () => {
       copyToClipboard(textToCopy);
     });
   }
+
+  const refreshVersionsBtn = document.getElementById('refresh-versions-btn');
+  if (refreshVersionsBtn) {
+    refreshVersionsBtn.addEventListener('click', () => refreshVersionsPanel(currentPageId));
+  }
+
+  const refreshProjectsBtn = document.getElementById('refresh-projects-btn');
+  if (refreshProjectsBtn) {
+    refreshProjectsBtn.addEventListener('click', () => refreshProjectsPanel());
+  }
+
+  const newProjectBtn = document.getElementById('new-project-btn');
+  if (newProjectBtn) {
+    newProjectBtn.addEventListener('click', () => {
+      currentPageId = null;
+      showSuccessToast('已切换到新建模式：保存后将生成新的独立链接');
+      refreshProjectsPanel();
+      refreshVersionsPanel(null);
+    });
+  }
+
+  refreshAssetPanel();
   
   // 初始化完成
   console.log('应用初始化完成');

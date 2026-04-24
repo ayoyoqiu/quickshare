@@ -10,6 +10,22 @@ const { CODE_TYPES } = require('./codeDetector');
 // 使用 mermaid-render 包来渲染 Mermaid 图表
 const { renderMermaid: mermaidRenderer } = require('mermaid-render');
 
+// ============================================================
+// 全局只注册一次 marked 配置（兼容 marked v13+）
+// 代码高亮由前端 hljs 处理，Mermaid 由前端 DOM 转换处理
+// ============================================================
+marked.use({
+  gfm: true,
+  breaks: true,
+  renderer: {
+    code({ text, lang }) {
+      const codeText = (text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const langClass = lang ? ` class="language-${lang}"` : '';
+      return `<pre><code${langClass}>${codeText}</code></pre>\n`;
+    }
+  }
+});
+
 /**
  * u6e32u67d3HTMLu5185u5bb9
  * @param {string} content - HTMLu5185u5bb9
@@ -104,71 +120,7 @@ async function renderMarkdown(content) {
     return processedContent.markdown;
   }
   
-  // 配置Marked选项
-  marked.setOptions({
-    gfm: true,
-    breaks: true,
-    smartLists: true,
-    smartypants: true,
-    highlight: function(code, lang) {
-      // 特殊处理 Mermaid 代码块
-      if (lang === 'mermaid') {
-        return `<div class="mermaid">${code}</div>`;
-      }
-      
-      const hljs = require('highlight.js');
-      if (lang && hljs.getLanguage(lang)) {
-        try {
-          return hljs.highlight(code, { language: lang }).value;
-        } catch (err) {}
-      }
-      return hljs.highlightAuto(code).value;
-    }
-  });
-  
-  // 自定义 renderer 来处理代码块
-  const renderer = new marked.Renderer();
-  const originalCodeRenderer = renderer.code.bind(renderer);
-  
-  // 重写代码块渲染器
-  renderer.code = function(code, language, isEscaped) {
-    // 检查是否是 Mermaid 代码
-    const isMermaidCode = (code) => {
-      const mermaidPatterns = [
-        /^(graph|flowchart)\s+(TB|TD|BT|RL|LR)\b/m,
-        /^sequenceDiagram\b/m,
-        /^classDiagram\b/m,
-        /^stateDiagram(-v2)?\b/m,
-        /^erDiagram\b/m,
-        /^gantt\b/m,
-        /^pie\b/m,
-        /^journey\b/m,
-        /^gitGraph\b/m,
-        /^mindmap\b/m,
-        /^timeline\b/m,
-        /^C4Context\b/m
-      ];
-      return mermaidPatterns.some(pattern => pattern.test(code));
-    };
-    
-    // 如果是 Mermaid 代码或语言标记为 mermaid
-    if (language === 'mermaid' || isMermaidCode(code)) {
-      return `<div class="mermaid">${code}</div>`;
-    }
-    
-    // 如果是 SVG 代码
-    if (language === 'svg') {
-      return `<div class="embedded-svg-container">${code}</div>`;
-    }
-    
-    // 否则使用原始渲染器
-    return originalCodeRenderer(code, language, isEscaped);
-  };
-  
-  // 使用自定义渲染器
-  marked.setOptions({ renderer });
-  
-  // 将Markdown转换为HTML
+  // 将Markdown转换为HTML（marked 已在模块顶部全局配置好）
   const htmlContent = marked.parse(content);
   
   // 使用最新版的 Mermaid 库，并增强其兼容性
@@ -319,7 +271,102 @@ async function renderMarkdown(content) {
     }
   `;
 
-  // 返回带有字节跳动风格的HTML
+  // 主题配置（12种）
+  const themes = [
+    { id: 'bytedance', label: '科技蓝', colors: ['#1677ff', '#05d4cd'] },
+    { id: 'lavender',  label: '梦幻紫', colors: ['#9B8EC7', '#BDA6CE', '#F2EAE0'] },
+    { id: 'forest',    label: '自然绿', colors: ['#9AB17A', '#C3CC9B', '#FBE8CE'] },
+    { id: 'aqua',      label: '清空蓝', colors: ['#71C9CE', '#A6E3E9', '#E3FDFD'] },
+    { id: 'ocean',     label: '商务蓝', colors: ['#3F72AF', '#112D4E', '#DBE2EF'] },
+    { id: 'sakura',    label: '樱花粉', colors: ['#e8709a', '#F2BED1', '#F9F5F6'] },
+    { id: 'mist',      label: '海雾',   colors: ['#6096B4', '#93BFCF', '#EEE9DA'] },
+    { id: 'midnight',  label: '星夜',   colors: ['#FF85BB', '#FFCEE3', '#021A54'] },
+    { id: 'geek',      label: '极客黑', colors: ['#00ADB5', '#393E46', '#222831'] },
+    { id: 'peach',     label: '蜜桃橙', colors: ['#FF9494', '#FFD1D1', '#FFF5E4'] },
+    { id: 'rose',      label: '玫瑰紫', colors: ['#8785A2', '#FFC7C7', '#F6F6F6'] },
+    { id: 'dream',     label: '梦境紫', colors: ['#424874', '#A6B1E1', '#F4EEFF'] },
+  ];
+
+  // 生成主题色块 SVG（三色渐变圆）
+  const swatchStyle = (colors) => {
+    if (colors.length === 1) return `background: ${colors[0]};`;
+    const stops = colors.map((c, i) => `${c} ${Math.round(i * 100 / (colors.length - 1))}%`).join(', ');
+    return `background: linear-gradient(135deg, ${stops});`;
+  };
+
+  const themeItems = themes.map(t => `
+    <div class="md-theme-item" data-theme="${t.id}" onclick="setMdTheme('${t.id}')">
+      <div class="md-theme-swatch" style="${swatchStyle(t.colors)}"></div>
+      <span class="md-theme-label">${t.label}</span>
+    </div>
+  `).join('');
+
+  const themeSwitcherHtml = `
+  <div id="md-theme-switcher">
+    <div id="md-theme-panel">
+      <h4>选择风格</h4>
+      <div class="md-theme-grid">${themeItems}</div>
+    </div>
+    <button id="md-theme-toggle-btn" title="切换主题风格" onclick="toggleMdThemePanel()">🎨</button>
+  </div>`;
+
+  const validThemeIds = themes.map(t => t.id);
+
+  const themeSwitcherScript = `
+  <script>
+    (function() {
+      var STORAGE_KEY = 'md-theme';
+      var VALID_THEMES = ${JSON.stringify(validThemeIds)};
+
+      // 优先读取 URL 参数 ?theme=xxx，其次 localStorage，最后默认 bytedance
+      function getInitialTheme() {
+        var urlParams = new URLSearchParams(window.location.search);
+        var urlTheme = urlParams.get('theme');
+        if (urlTheme && VALID_THEMES.includes(urlTheme)) return urlTheme;
+        var saved = localStorage.getItem(STORAGE_KEY);
+        if (saved && VALID_THEMES.includes(saved)) return saved;
+        return 'bytedance';
+      }
+
+      var currentTheme = getInitialTheme();
+
+      function applyTheme(themeId) {
+        document.body.setAttribute('data-md-theme', themeId);
+        document.querySelectorAll('.md-theme-item').forEach(function(el) {
+          el.classList.toggle('active', el.dataset.theme === themeId);
+        });
+        currentTheme = themeId;
+        localStorage.setItem(STORAGE_KEY, themeId);
+      }
+
+      window.setMdTheme = function(themeId) {
+        applyTheme(themeId);
+        closeMdThemePanel();
+      };
+
+      window.toggleMdThemePanel = function() {
+        var panel = document.getElementById('md-theme-panel');
+        panel.classList.toggle('open');
+      };
+
+      window.closeMdThemePanel = function() {
+        document.getElementById('md-theme-panel').classList.remove('open');
+      };
+
+      document.addEventListener('click', function(e) {
+        var switcher = document.getElementById('md-theme-switcher');
+        if (switcher && !switcher.contains(e.target)) {
+          closeMdThemePanel();
+        }
+      });
+
+      document.addEventListener('DOMContentLoaded', function() {
+        applyTheme(currentTheme);
+      });
+    })();
+  <\/script>`;
+
+  // 返回带有主题切换功能的 Markdown HTML
   return `
     <!DOCTYPE html>
     <html lang="zh-CN">
@@ -341,6 +388,7 @@ async function renderMarkdown(content) {
       <meta name="apple-mobile-web-app-title" content="LinkPaste AI">
       
       <link rel="stylesheet" href="/css/markdown-bytedance.css">
+      <link rel="stylesheet" href="/css/markdown-themes.css">
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
       <link rel="preconnect" href="https://fonts.googleapis.com">
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -350,21 +398,26 @@ async function renderMarkdown(content) {
           margin: 0;
           padding: 0;
           background-color: #f5f5f7;
+          transition: background-color 0.3s ease;
         }
-        @media (prefers-color-scheme: dark) {
-          body {
-            background-color: #1a1a1a;
-          }
+        /* 内容区背景透明，与 body 底色完全融合，无割裂感 */
+        .markdown-body {
+          background-color: transparent !important;
+          transition: color 0.3s ease;
+          min-height: 100vh;
+          box-sizing: border-box;
         }
         ${embeddedStyles}
       </style>
       ${mermaidStyles}
+      ${themeSwitcherScript}
       ${mermaidScript}
     </head>
     <body>
       <div class="markdown-body">
         ${htmlContent}
       </div>
+      ${themeSwitcherHtml}
       <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
       <script>
         document.addEventListener('DOMContentLoaded', () => {
